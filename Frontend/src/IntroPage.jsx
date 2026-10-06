@@ -172,7 +172,7 @@ export default function IntroPage() {
         className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] cursor-pointer group bg-[#1a1a1a] border border-white/10 rounded-full p-2 pl-6 flex items-center shadow-2xl shadow-black/50 transition-all hover:scale-105 active:scale-95 overflow-hidden"
         style={{ minWidth: 260 }}
       >
-  {/* Default: TraverseHub + Enter */}
+  {/* Default: Travelloop + Enter */}
         <motion.div
           animate={{ opacity: ctaInView ? 0 : 1, y: ctaInView ? -8 : 0 }}
           transition={{ duration: 0.35 }}
@@ -185,7 +185,7 @@ export default function IntroPage() {
                 <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="white" />
               </svg>
             </div>
-            <span className="text-white font-medium text-2xl tracking-tight">TraverseHub</span>
+            <span className="text-white font-medium text-2xl tracking-tight">Travelloop</span>
           </div>
           <div className="bg-[#a3ff00] text-black px-8 py-3 rounded-full font-bold text-lg group-hover:bg-[#b5ff33] transition-colors">
             Enter

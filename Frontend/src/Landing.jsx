@@ -1,7 +1,83 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, MapPin, Calendar, User, Plus, Map as MapIcon, DollarSign, Share2, Copy, Send, ChevronDown, Layers, SlidersHorizontal, ArrowUpDown, Settings, LogOut, X, NotebookPen, ListChecks, Globe2, Activity, ClipboardCheck, BarChart3, Sparkles } from 'lucide-react';
+import { Search, MapPin, Calendar, User, Plus, Map as MapIcon, DollarSign, Share2, Copy, Send, ChevronDown, Layers, SlidersHorizontal, ArrowUpDown, Settings, LogOut, X, NotebookPen, ListChecks, Globe2, Activity, ClipboardCheck, BarChart3, Sparkles, Mail, Pencil, Award, Plane, Clock, Wallet, Compass, Lock, CalendarDays, Check, Backpack, Route, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { motion, useScroll, useTransform } from 'framer-motion';
 import * as api from './api';
+import Logo from './components/Logo';
+import SiteFooter from './components/SiteFooter';
+
+// Whole days from today until a YYYY-MM-DD date (negative if in the past).
+const daysUntil = (dateStr) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(`${dateStr}T00:00:00`);
+  return Math.round((target - today) / 86400000);
+};
+
+const HERO_PHOTOS = [
+  ['1464822759023-fed622ff2c3b', 'Mountains'],
+  ['1602216056096-3b40cc0c9944', 'Kerala backwaters'],
+  ['1477587458883-47145ed94245', 'Hawa Mahal, Jaipur'],
+  ['1551641506-ee5bf4cb45f1', 'Tokyo at night'],
+  ['1512343879784-a960bf40e7f2', 'Goa beach'],
+  ['1499678329028-101435549a4e', 'Cinque Terre'],
+  ['1564507592333-c60657eea523', 'Taj Mahal'],
+  ['1626621341517-bbf3d9990a23', 'Snow trek'],
+  ['1537996194471-e657df975ab4', 'Bali temple'],
+  ['1514222134-b57cbb8ce073', 'Golden Temple, Amritsar'],
+  ['1499856871958-5b9627545d1a', 'Paris'],
+  ['1470071459604-3b5ec3a7fe05', 'Green valley'],
+  ['1573843981267-be1999ff37cd', 'Maldives'],
+  ['1599661046289-e31897846e41', 'Amber Fort'],
+  ['1493976040374-85c8e12f0c0e', 'Kyoto street'],
+  ['1501785888041-af3ef285b470', 'Mountain lake'],
+  ['1548661710-7f540c9c56d6', 'Singapore skyline'],
+  ['1531366936337-7c912a4589a7', 'Northern lights'],
+  ['1593693411515-c20261bcad6e', 'Houseboat'],
+  ['1587595431973-160d0d94add1', 'Machu Picchu'],
+  ['1507525428034-b723cf961d3e', 'Beach sunset'],
+  ['1540959733332-eab4deabeeaf', 'Tokyo crossing'],
+  ['1469474968028-56623f02e42e', 'Misty hills'],
+  ['1533105079780-92b9be482077', 'Santorini'],
+  ['1561361513-2d000a50f0dc', 'Road trip'],
+];
+
+// Small seeded PRNG so the "random" collage looks organic but stays identical on every render.
+const seededRandom = (seed) => () => {
+  seed = (seed + 0x6d2b79f5) | 0;
+  let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+
+// Tilted full-width hero collage: columns of varying width, each with 1–3 tiles of varying height/width/offset.
+const HERO_COLUMNS = (() => {
+  const rand = seededRandom(20261006);
+  let photo = 0;
+  const total = 7;
+  return Array.from({ length: total }, (_, c) => {
+    const r = rand();
+    const count = r < 0.4 ? 1 : 2;
+    return {
+      grow: 0.85 + rand() * 0.6,
+      // Spacer weights relative to tiles (~1 each) give each column a random vertical offset.
+      padTop: rand() * 0.3,
+      padBottom: rand() * 0.25,
+      mobile: c < 4,
+      tiles: Array.from({ length: count }, () => {
+        const [id, alt] = HERO_PHOTOS[photo++ % HERO_PHOTOS.length];
+        return {
+          src: `https://images.unsplash.com/photo-${id}?q=75&w=600`,
+          alt,
+          grow: 0.6 + rand(),
+          width: 92 + Math.round(rand() * 8),
+          align: rand() < 0.5 ? 'self-start' : 'self-end',
+        };
+      }),
+    };
+  });
+})();
+
 
 export default function Landing() {
   const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard' | 'trip' | 'profile'
@@ -9,6 +85,14 @@ export default function Landing() {
   const [isAdvancedSearchOpen, setIsAdvancedSearchOpen] = useState(false);
   const [user, setUser] = useState(null);
   const navigate = useNavigate();
+
+  // Hero collage fades, shrinks slightly and blurs into the background as the page scrolls over it.
+  const { scrollY } = useScroll();
+  const heroFade = (y) => Math.min(1, y / (window.innerHeight * 0.6));
+  const heroOpacity = useTransform(scrollY, (y) => 1 - heroFade(y));
+  const heroScale = useTransform(scrollY, (y) => 1 - heroFade(y) * 0.08);
+  const heroBlur = useTransform(scrollY, (y) => `blur(${heroFade(y) * 8}px)`);
+  const heroPointer = useTransform(scrollY, (y) => (heroFade(y) > 0.5 ? 'none' : 'auto'));
 
   // ─── Dynamic State ──────────────────────────────────────
   const [trips, setTrips] = useState([]);
@@ -39,6 +123,11 @@ export default function Landing() {
   // Itinerary
   const [newStop, setNewStop] = useState({ title: '', time: '', type: 'activity' });
 
+  // Profile
+  const [profileDetails, setProfileDetails] = useState(null);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileStatus, setProfileStatus] = useState(null);
+
   useEffect(() => {
     const userData = localStorage.getItem('user');
     if (userData) {
@@ -65,6 +154,13 @@ export default function Landing() {
   useEffect(() => {
     if (user) fetchTrips();
   }, [user, fetchTrips]);
+
+  useEffect(() => {
+    if (currentView !== 'profile') return;
+    api.getProfile()
+      .then((res) => setProfileDetails(res.data))
+      .catch((err) => console.error('Failed to load profile:', err));
+  }, [currentView]);
 
   // ─── Handlers ───────────────────────────────────────────
 
@@ -274,14 +370,14 @@ export default function Landing() {
   // Static suggested trips data (not user-specific)
   const suggestedTrips = [
     { id: 101, name: 'Bali Paradise', type: 'Tropical', duration: '7 Days', price: '$850', image: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?q=80&w=1000', highlights: [{ name: 'Ubud Rice Terrace', image: 'https://images.unsplash.com/photo-1512100356356-de1b84283e18?q=80&w=800' }, { name: 'Ulun Danu Temple', image: 'https://images.unsplash.com/photo-1555400038-63f5ba517a47?q=80&w=800' }, { name: 'Nusa Penida', image: 'https://images.unsplash.com/photo-1558005530-a7958896ec60?q=80&w=800' }] },
-    { id: 102, name: 'Tokyo Lights', type: 'City', duration: '5 Days', price: '$1200', image: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?q=80&w=1000', highlights: [{ name: 'Shibuya Crossing', image: 'https://images.unsplash.com/photo-1536098561742-ca998e48cbcc?q=80&w=800' }, { name: 'Senso-ji Temple', image: 'https://images.unsplash.com/photo-1526481280695-3c4691d8d69e?q=80&w=800' }, { name: 'Tokyo Tower', image: 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?q=80&w=800' }] },
-    { id: 103, name: 'Santorini Escape', type: 'Coastal', duration: '6 Days', price: '$1500', image: 'https://images.unsplash.com/photo-1570077188670-e3a8d69ac5f1?q=80&w=1000', highlights: [{ name: 'Oia Sunset', image: 'https://images.unsplash.com/photo-1613395877344-13d4a8e0d49e?q=80&w=800' }, { name: 'Blue Domes', image: 'https://images.unsplash.com/photo-1571731956672-f2b94d7dd0cb?q=80&w=800' }, { name: 'Red Beach', image: 'https://images.unsplash.com/photo-1505765050516-f72dcac9c60e?q=80&w=800' }] },
-    { id: 104, name: 'Machu Picchu', type: 'Adventure', duration: '10 Days', price: '$950', image: 'https://images.unsplash.com/photo-1587595431973-160d0d94add1?q=80&w=1000', highlights: [{ name: 'Sun Gate', image: 'https://images.unsplash.com/photo-1526392060635-9d6019884377?q=80&w=800' }, { name: 'Temple of Sun', image: 'https://images.unsplash.com/photo-1622396488040-23ea2f7033f1?q=80&w=800' }, { name: 'Huayna Peak', image: 'https://images.unsplash.com/photo-1580619305218-8423a7ef79b4?q=80&w=800' }] },
+    { id: 102, name: 'Tokyo Lights', type: 'City', duration: '5 Days', price: '$1200', image: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?q=80&w=1000', highlights: [{ name: 'Shibuya Crossing', image: 'https://images.unsplash.com/photo-1536098561742-ca998e48cbcc?q=80&w=800' }, { name: 'Kyoto Day Trip', image: 'https://images.unsplash.com/photo-1545569341-9eb8b30979d9?q=80&w=800' }, { name: 'Tokyo Tower', image: 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?q=80&w=800' }] },
+    { id: 103, name: 'Santorini Escape', type: 'Coastal', duration: '6 Days', price: '$1500', image: 'https://images.unsplash.com/photo-1533105079780-92b9be482077?q=80&w=1000', highlights: [{ name: 'Oia Sunset', image: 'https://images.unsplash.com/photo-1613395877344-13d4a8e0d49e?q=80&w=800' }, { name: 'Blue Domes', image: 'https://images.unsplash.com/photo-1571731956672-f2b94d7dd0cb?q=80&w=800' }, { name: 'Red Beach', image: 'https://images.unsplash.com/photo-1505765050516-f72dcac9c60e?q=80&w=800' }] },
+    { id: 104, name: 'Machu Picchu', type: 'Adventure', duration: '10 Days', price: '$950', image: 'https://images.unsplash.com/photo-1587595431973-160d0d94add1?q=80&w=1000', highlights: [{ name: 'Sun Gate', image: 'https://images.unsplash.com/photo-1526392060635-9d6019884377?q=80&w=800' }, { name: 'Lima Coastline', image: 'https://images.unsplash.com/photo-1531968455001-5c5272a41129?q=80&w=800' }, { name: 'Huayna Peak', image: 'https://images.unsplash.com/photo-1580619305218-8423a7ef79b4?q=80&w=800' }] },
     { id: 105, name: 'Northern Lights', type: 'Winter', duration: '4 Days', price: '$1100', image: 'https://images.unsplash.com/photo-1531366936337-7c912a4589a7?q=80&w=1000', highlights: [{ name: 'Aurora Camp', image: 'https://images.unsplash.com/photo-1483347756197-71ef80e95f73?q=80&w=800' }, { name: 'Ice Cave', image: 'https://images.unsplash.com/photo-1517329782449-810562a4ec2f?q=80&w=800' }, { name: 'Frozen Lake', image: 'https://images.unsplash.com/photo-1478059299873-f047d8c5fe1a?q=80&w=800' }] }
   ];
 
   const renderDashboard = () => (
-    <div className="max-w-6xl mx-auto px-6 py-12">
+    <div className="relative z-10 max-w-6xl mx-auto px-6 py-12">
       {/* AI destination discovery entry point */}
       <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl bg-[#152010] text-white px-6 py-5 shadow-lg">
         <div>
@@ -942,79 +1038,288 @@ export default function Landing() {
     </div>
   );
 
-  const renderProfileDashboard = () => (
-    <div className="max-w-6xl mx-auto px-6 py-10">
-      <div className="bg-white border border-[#d6e7cc] rounded-3xl p-6 md:p-8 shadow-xl">
+  // ─── Profile helpers ────────────────────────────────────
+  const tripDays = (trip) => {
+    if (!trip.startDate || !trip.endDate) return 0;
+    const diff = (new Date(trip.endDate) - new Date(trip.startDate)) / 86400000;
+    return Number.isFinite(diff) && diff >= 0 ? Math.round(diff) + 1 : 0;
+  };
+
+  const tripBudgetTotal = (trip) =>
+    ['transport', 'accommodation', 'activities'].reduce(
+      (sum, cat) => sum + (trip.budget?.[cat] || []).reduce((s, i) => s + (i.amount || 0), 0),
+      0
+    );
+
+  const formatTripDates = (trip) => {
+    if (!trip.startDate) return 'Dates not set';
+    const fmt = (d) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    return trip.endDate ? `${fmt(trip.startDate)} – ${fmt(trip.endDate)}` : fmt(trip.startDate);
+  };
+
+  const startEditingProfile = () => {
+    setSettingsForm({ name: user?.name || '', email: user?.email || '' });
+    setProfileStatus(null);
+    setIsEditingProfile(true);
+  };
+
+  const saveProfile = async () => {
+    if (!settingsForm.name.trim() || !settingsForm.email.trim()) {
+      setProfileStatus({ type: 'error', text: 'Name and email cannot be empty.' });
+      return;
+    }
+    try {
+      const res = await api.updateProfile(settingsForm);
+      setUser(res.data);
+      localStorage.setItem('user', JSON.stringify(res.data));
+      setIsEditingProfile(false);
+      setProfileStatus({ type: 'success', text: 'Profile updated.' });
+    } catch (err) {
+      setProfileStatus({ type: 'error', text: err.response?.data?.message || 'Failed to update profile.' });
+    }
+  };
+
+  const renderProfileTripCard = (trip, past = false) => (
+    <div
+      key={trip._id}
+      onClick={() => handleTripClick(trip._id)}
+      className="group bg-white border border-[#d6e7cc] rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 hover:-translate-y-1.5 hover:shadow-xl hover:border-[#749962]"
+    >
+      <div className="h-36 relative overflow-hidden bg-gradient-to-br from-[#749962] to-[#152010]">
+        {trip.image ? (
+          <img
+            src={trip.image}
+            alt={trip.name}
+            className={`w-full h-full object-cover transition-all duration-700 group-hover:scale-110 ${past ? 'grayscale group-hover:grayscale-0' : ''}`}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-white/40"><MapIcon size={40} /></div>
+        )}
+        {!past && trip.startDate && daysUntil(trip.startDate) >= 0 && (
+          <span className="absolute top-3 left-3 bg-white/90 text-[#152010] text-xs font-bold px-2.5 py-1 rounded-full">
+            {daysUntil(trip.startDate) === 0 ? 'Today' : `In ${daysUntil(trip.startDate)} days`}
+          </span>
+        )}
+      </div>
+      <div className="p-4">
+        <h4 className="text-[#152010] font-bold truncate">{trip.name}</h4>
+        {trip.destination && <p className="text-sm text-gray-500 flex items-center gap-1 mt-1 truncate"><MapPin size={13} /> {trip.destination}</p>}
+        <p className="text-xs text-[#608250] font-semibold mt-2 flex items-center gap-1"><CalendarDays size={13} /> {formatTripDates(trip)}</p>
+      </div>
+    </div>
+  );
+
+  const renderProfileDashboard = () => {
+    const allTrips = [...trips, ...previousTrips];
+    const destinations = new Set(allTrips.map((t) => (t.destination || '').split(',')[0].trim().toLowerCase()).filter(Boolean));
+    const totalDays = allTrips.reduce((s, t) => s + tripDays(t), 0);
+    const totalBudget = allTrips.reduce((s, t) => s + tripBudgetTotal(t), 0);
+    const nextTrip = [...trips]
+      .filter((t) => t.startDate && daysUntil(t.startDate) >= 0)
+      .sort((a, b) => new Date(a.startDate) - new Date(b.startDate))[0];
+    const memberSince = profileDetails?.createdAt
+      ? new Date(profileDetails.createdAt).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
+      : null;
+
+    const stats = [
+      { label: 'Trips planned', value: allTrips.length, icon: Plane },
+      { label: 'Upcoming', value: trips.length, icon: Clock },
+      { label: 'Destinations', value: destinations.size, icon: Compass },
+      { label: 'Days of travel', value: totalDays, icon: CalendarDays },
+      { label: 'Budget planned', value: `₹${totalBudget.toLocaleString('en-IN')}`, icon: Wallet },
+    ];
+
+    const badges = [
+      { name: 'First Steps', desc: 'Plan your first trip', icon: Plane, earned: allTrips.length >= 1 },
+      { name: 'Explorer', desc: 'Plan trips to 3 destinations', icon: Compass, earned: destinations.size >= 3 },
+      { name: 'Globetrotter', desc: 'Plan 5 trips', icon: Award, earned: allTrips.length >= 5 },
+      { name: 'Budget Pro', desc: 'Add a budget to a trip', icon: Wallet, earned: allTrips.some((t) => tripBudgetTotal(t) > 0) },
+      { name: 'Itinerary Builder', desc: 'Add a day plan to a trip', icon: Route, earned: allTrips.some((t) => (t.days || []).length > 0) },
+      { name: 'Ready to Go', desc: 'Start a packing list', icon: Backpack, earned: allTrips.some((t) => (t.packingList || []).length > 0) },
+    ];
+
+    const emptyState = (text) => (
+      <div className="border-2 border-dashed border-[#c9dcbd] rounded-2xl p-8 text-center bg-white/50">
+        <p className="text-gray-500 mb-4">{text}</p>
+        <button
+          onClick={() => navigate('/create-trip')}
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#152010] text-white font-semibold hover:bg-[#749962] transition-colors"
+        >
+          <Sparkles size={16} /> Discover with AI
+        </button>
+      </div>
+    );
+
+    return (
+      <div className="max-w-6xl mx-auto px-6 py-10">
         <button
           onClick={() => setCurrentView('dashboard')}
           className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-[#608250] hover:text-[#152010] transition-colors"
         >
-          <span>&larr;</span> Back to Landing
+          <span>&larr;</span> Back to dashboard
         </button>
-        <h2 className="text-3xl md:text-4xl font-black text-[#152010] tracking-tight mb-8">User Profile</h2>
 
-        <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-6 mb-10">
-          <div className="bg-[#f3f8ef] border border-[#d6e7cc] rounded-2xl p-6 flex flex-col items-center justify-center">
-            <div className="w-28 h-28 rounded-full border-2 border-[#749962] bg-white flex items-center justify-center text-4xl font-black text-[#152010]">
-              {user?.name?.charAt(0).toUpperCase() || 'U'}
-            </div>
-            <p className="text-[#608250] text-xs uppercase tracking-wider mt-4">Traveler</p>
+        {/* Header card with cover */}
+        <div className="bg-white border border-[#d6e7cc] rounded-3xl shadow-xl overflow-hidden">
+          <div className="h-36 md:h-44 relative bg-gradient-to-br from-[#152010] via-[#3A512F] to-[#749962] overflow-hidden">
+            <div className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: 'radial-gradient(#fff 1.5px, transparent 1.5px)', backgroundSize: '22px 22px' }} />
+            <svg className="absolute -right-6 -top-6 w-48 h-48 text-[#a3ff00]/15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" />
+            </svg>
           </div>
 
-          <div className="bg-[#f3f8ef] border border-[#d6e7cc] rounded-2xl p-6 md:p-8">
-            <h3 className="text-xl md:text-2xl text-[#152010] font-black mb-4">Your Details</h3>
-            <div className="space-y-3 text-sm md:text-base">
-              <p className="text-gray-700"><span className="text-[#608250] font-semibold">Name:</span> {user?.name || 'Explorer'}</p>
-              <p className="text-gray-700"><span className="text-[#608250] font-semibold">Email:</span> {user?.email || 'user@example.com'}</p>
-              <p className="text-gray-700"><span className="text-[#608250] font-semibold">Membership:</span> Premium Explorer</p>
+          <div className="px-6 md:px-8 pb-6 md:pb-8">
+            <div className="flex flex-col md:flex-row md:items-end gap-4 md:gap-6">
+              <div className="relative -mt-14 w-28 h-28 rounded-full border-4 border-white bg-gradient-to-br from-[#a3ff00] to-[#749962] flex items-center justify-center text-4xl font-black text-[#152010] shadow-lg shrink-0">
+                {user?.name?.charAt(0).toUpperCase() || 'U'}
+              </div>
+
+              <div className="flex-1 min-w-0 md:pb-1">
+                {isEditingProfile ? (
+                  <div className="grid sm:grid-cols-2 gap-3 max-w-xl pt-2 md:pt-0">
+                    <div>
+                      <label htmlFor="profile-name" className="text-xs font-bold text-[#608250] uppercase tracking-wider">Name</label>
+                      <input id="profile-name" value={settingsForm.name} onChange={(e) => setSettingsForm({ ...settingsForm, name: e.target.value })} className="w-full mt-1 bg-[#f8fcf5] border border-[#d6e7cc] rounded-xl px-3 py-2 outline-none focus:border-[#749962]" />
+                    </div>
+                    <div>
+                      <label htmlFor="profile-email" className="text-xs font-bold text-[#608250] uppercase tracking-wider">Email</label>
+                      <input id="profile-email" type="email" value={settingsForm.email} onChange={(e) => setSettingsForm({ ...settingsForm, email: e.target.value })} className="w-full mt-1 bg-[#f8fcf5] border border-[#d6e7cc] rounded-xl px-3 py-2 outline-none focus:border-[#749962]" />
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <h2 className="text-3xl md:text-4xl font-black text-[#152010] tracking-tight truncate">{user?.name || 'Explorer'}</h2>
+                    <div className="flex flex-wrap gap-x-5 gap-y-1 mt-2 text-sm text-gray-500">
+                      <span className="flex items-center gap-1.5"><Mail size={14} /> {user?.email}</span>
+                      {memberSince && <span className="flex items-center gap-1.5"><CalendarDays size={14} /> Member since {memberSince}</span>}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-2 md:pb-1">
+                {isEditingProfile ? (
+                  <>
+                    <button onClick={saveProfile} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#749962] text-white font-semibold hover:bg-[#608250] transition-colors"><Check size={16} /> Save</button>
+                    <button onClick={() => { setIsEditingProfile(false); setProfileStatus(null); }} className="px-4 py-2.5 rounded-xl border border-[#d6e7cc] text-gray-600 font-semibold hover:bg-[#f3f8ef] transition-colors">Cancel</button>
+                  </>
+                ) : (
+                  <>
+                    <button onClick={startEditingProfile} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[#d6e7cc] text-[#152010] font-semibold hover:border-[#749962] hover:bg-[#f3f8ef] transition-colors"><Pencil size={15} /> Edit profile</button>
+                    <button onClick={() => navigate('/create-trip')} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#152010] text-white font-semibold hover:bg-[#749962] transition-colors"><Sparkles size={15} /> Plan a trip</button>
+                  </>
+                )}
+              </div>
+            </div>
+            {profileStatus && (
+              <p role="status" className={`mt-4 text-sm font-medium ${profileStatus.type === 'error' ? 'text-red-600' : 'text-[#608250]'}`}>{profileStatus.text}</p>
+            )}
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4 mt-6">
+          {stats.map(({ label, value, icon: Icon }, i) => (
+            <div key={label} className={`bg-white border border-[#d6e7cc] rounded-2xl p-4 md:p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${i === stats.length - 1 ? 'col-span-2 md:col-span-1' : ''}`}>
+              <div className="w-9 h-9 rounded-xl bg-[#edf6e7] text-[#608250] flex items-center justify-center mb-3"><Icon size={18} /></div>
+              <p className="text-2xl md:text-3xl font-black text-[#152010] truncate">{value}</p>
+              <p className="text-xs md:text-sm text-gray-500 font-medium mt-0.5">{label}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="grid lg:grid-cols-3 gap-6 mt-6">
+          {/* Next trip */}
+          <div className="lg:col-span-2 rounded-3xl overflow-hidden relative min-h-[220px] bg-gradient-to-br from-[#152010] to-[#3A512F] text-white shadow-xl">
+            {nextTrip ? (
+              <>
+                {nextTrip.image && <img src={nextTrip.image} alt="" className="absolute inset-0 w-full h-full object-cover opacity-40" />}
+                <div className="relative p-6 md:p-8 h-full flex flex-col justify-between gap-6">
+                  <div>
+                    <p className="text-[#a3ff00] text-xs font-bold uppercase tracking-widest">Next adventure</p>
+                    <h3 className="text-2xl md:text-3xl font-black mt-2">{nextTrip.name}</h3>
+                    {nextTrip.destination && <p className="text-white/80 flex items-center gap-1.5 mt-1"><MapPin size={15} /> {nextTrip.destination}</p>}
+                    <p className="text-white/70 text-sm mt-1">{formatTripDates(nextTrip)}</p>
+                  </div>
+                  <div className="flex flex-wrap items-end justify-between gap-4">
+                    <div>
+                      <p className="text-5xl font-black leading-none">{daysUntil(nextTrip.startDate)}</p>
+                      <p className="text-white/70 text-sm mt-1">{daysUntil(nextTrip.startDate) === 1 ? 'day to go' : 'days to go'}</p>
+                    </div>
+                    <button onClick={() => handleTripClick(nextTrip._id)} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#a3ff00] text-[#152010] font-bold hover:bg-[#b5ff33] transition-colors">
+                      Open trip <ArrowRight size={16} />
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="relative p-6 md:p-8 h-full flex flex-col justify-center">
+                <p className="text-[#a3ff00] text-xs font-bold uppercase tracking-widest">Next adventure</p>
+                <h3 className="text-2xl md:text-3xl font-black mt-2">Nothing planned yet</h3>
+                <p className="text-white/70 mt-2 max-w-md">Tell us your dates and we will find the best places to go, without the crowds.</p>
+                <button onClick={() => navigate('/create-trip')} className="mt-5 self-start inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#a3ff00] text-[#152010] font-bold hover:bg-[#b5ff33] transition-colors">
+                  <Sparkles size={16} /> Find a destination
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Badges */}
+          <div className="bg-white border border-[#d6e7cc] rounded-3xl p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-black text-[#152010]">Travel badges</h3>
+              <span className="text-xs font-bold text-[#608250] bg-[#edf6e7] px-2.5 py-1 rounded-full">{badges.filter((b) => b.earned).length}/{badges.length}</span>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              {badges.map(({ name, desc, icon: Icon, earned }) => (
+                <div key={name} title={`${name}: ${desc}`} className="flex flex-col items-center text-center gap-1.5">
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-transform duration-300 hover:scale-110 ${earned ? 'bg-gradient-to-br from-[#a3ff00] to-[#749962] text-[#152010] shadow-md' : 'bg-gray-100 text-gray-300'}`}>
+                    {earned ? <Icon size={20} /> : <Lock size={16} />}
+                  </div>
+                  <p className={`text-[11px] font-semibold leading-tight ${earned ? 'text-[#152010]' : 'text-gray-400'}`}>{name}</p>
+                </div>
+              ))}
             </div>
           </div>
         </div>
 
-        <div className="mb-10">
-          <h3 className="text-2xl font-black text-[#152010] mb-5">Preplanned Trips</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {trips.slice(0, 3).map((trip) => (
-              <div
-                key={trip.id}
-                onClick={() => handleTripClick(trip.id)}
-                className="bg-[#f3f8ef] border border-[#d6e7cc] rounded-2xl p-4 cursor-pointer hover:border-[#749962] transition-colors"
-              >
-                <div className="h-36 rounded-xl overflow-hidden mb-4">
-                  <img src={trip.image} alt={trip.name} className="w-full h-full object-cover" />
-                </div>
-                <h4 className="text-[#152010] font-bold mb-3">{trip.name}</h4>
-                <button className="w-full py-2.5 rounded-lg border border-[#749962] text-[#608250] font-semibold hover:bg-[#749962] hover:text-white transition-colors">
-                  View
-                </button>
-              </div>
-            ))}
+        {/* Trips */}
+        <div className="mt-10">
+          <div className="flex items-center justify-between mb-5">
+            <h3 className="text-2xl font-black text-[#152010]">Upcoming trips</h3>
+            <button onClick={() => { setCurrentView('trip'); setTripTab('create'); }} className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#608250] hover:text-[#152010]"><Plus size={16} /> New trip</button>
           </div>
+          {trips.length ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              {trips.map((trip) => renderProfileTripCard(trip))}
+            </div>
+          ) : emptyState('No upcoming trips yet.')}
         </div>
 
-        <div>
-          <h3 className="text-2xl font-black text-[#152010] mb-5">Previous Trips</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {previousTrips.map((trip) => (
-              <div
-                key={trip.id}
-                onClick={() => handleTripClick(trip.id)}
-                className="bg-[#f3f8ef] border border-[#d6e7cc] rounded-2xl p-4 cursor-pointer hover:border-[#749962] transition-colors"
-              >
-                <div className="h-36 rounded-xl overflow-hidden mb-4">
-                  <img src={trip.image} alt={trip.name} className="w-full h-full object-cover grayscale hover:grayscale-0 transition-all" />
-                </div>
-                <h4 className="text-[#152010] font-bold mb-3">{trip.name}</h4>
-                <button className="w-full py-2.5 rounded-lg border border-[#749962] text-[#608250] font-semibold hover:bg-[#749962] hover:text-white transition-colors">
-                  View
-                </button>
-              </div>
-            ))}
+        <div className="mt-10">
+          <h3 className="text-2xl font-black text-[#152010] mb-5">Past trips</h3>
+          {previousTrips.length ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              {previousTrips.map((trip) => renderProfileTripCard(trip, true))}
+            </div>
+          ) : (
+            <p className="text-gray-500 bg-white/60 border border-[#d6e7cc] rounded-2xl p-6">Your completed trips will appear here.</p>
+          )}
+        </div>
+
+        {/* Account */}
+        <div className="mt-10 bg-white border border-[#d6e7cc] rounded-3xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-black text-[#152010]">Account</h3>
+            <p className="text-sm text-gray-500">Signed in as {user?.email}</p>
           </div>
+          <button onClick={handleLogout} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-red-200 text-red-500 font-semibold hover:bg-red-50 transition-colors self-start sm:self-auto">
+            <LogOut size={16} /> Log out
+          </button>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="min-h-screen bg-[#E5F0E0] text-gray-900 font-sans selection:bg-[#749962] selection:text-white relative">
@@ -1059,13 +1364,14 @@ export default function Landing() {
 
       {/* Navbar - Centered Logo, No Border */}
       <header className="h-[80px] bg-[#E5F0E0] flex items-center justify-center px-8 sticky top-0 z-40">
-         <div 
-          className="text-3xl font-black tracking-tighter text-[#1a1a1a] cursor-pointer flex items-center gap-2"
+         <button
+           type="button"
+           className="group cursor-pointer"
            onClick={() => setCurrentView('dashboard')}
+           aria-label="Travelloop home"
          >
-            <div className="w-8 h-8 bg-[#749962] rounded-md shadow-sm"></div>
-            TRAVERSEHUB
-         </div>
+           <Logo size={40} textClassName="text-[#1a1a1a] text-3xl tracking-tighter" />
+         </button>
       </header>
 
       {/* Main Content Area */}
@@ -1104,48 +1410,41 @@ export default function Landing() {
           </div>
         )}
 
-        {/* Banner Image 50vh */}
-        {/* Banner Image 55vh with Skewed Masonry Layout */}
+        {/* Hero: full-width tilted collage. Row is wider than the screen and clipped, so the skew never leaves gaps or causes side-scroll; tiles pop out on hover */}
         {currentView === 'dashboard' && (
-          <div className="w-full h-[55vh] bg-[#E5F0E0] relative overflow-hidden flex items-center justify-center">
-             
-             {/* Skewed Grid Container */}
-             <div className="flex gap-4 w-[120%] md:w-[110%] max-w-[1600px] h-[90%] mt-[-5%]" style={{ transform: 'skewX(-15deg)' }}>
-                
-                {/* Column 1 (Left) */}
-                <div className="flex flex-col gap-4 w-[22%] h-full justify-start pt-8">
-                   <div className="relative h-[45%] w-full overflow-hidden shadow-sm bg-gray-200">
-                      <img src="https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?q=80&w=800" alt="Mountains" className="absolute inset-0 w-full h-full object-cover" style={{ transform: 'skewX(15deg) scale(1.25)' }} />
-                   </div>
-                   <div className="relative h-[45%] w-[85%] ml-auto overflow-hidden shadow-sm bg-gray-200">
-                      <img src="https://images.unsplash.com/photo-1551641506-ee5bf4cb45f1?q=80&w=800" alt="Japan Night" className="absolute inset-0 w-full h-full object-cover" style={{ transform: 'skewX(15deg) scale(1.25)' }} />
-                   </div>
-                </div>
-
-                {/* Column 2 (Center Large) */}
-                <div className="relative w-[32%] h-full overflow-hidden shadow-sm mt-4 bg-gray-200">
-                   <img src="https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?q=80&w=800" alt="Kerala Backwaters" className="absolute inset-0 w-full h-full object-cover" style={{ transform: 'skewX(15deg) scale(1.25)' }} />
-                </div>
-
-                {/* Column 3 (Right) */}
-                <div className="flex flex-col gap-4 w-[26%] h-full justify-start">
-                   <div className="relative h-[48%] w-[95%] overflow-hidden shadow-sm bg-gray-200">
-                      <img src="https://images.unsplash.com/photo-1499678329028-101435549a4e?q=80&w=800" alt="Cinque Terre" className="absolute inset-0 w-full h-full object-cover" style={{ transform: 'skewX(15deg) scale(1.25)' }} />
-                   </div>
-                   <div className="relative h-[45%] w-[80%] overflow-hidden shadow-sm mr-auto bg-gray-200">
-                      <img src="https://images.unsplash.com/photo-1548661710-7f540c9c56d6?q=80&w=800" alt="Market" className="absolute inset-0 w-full h-full object-cover" style={{ transform: 'skewX(15deg) scale(1.25)' }} />
-                   </div>
-                </div>
-
-                {/* Column 4 (Far Right) */}
-                <div className="relative w-[16%] h-[35%] overflow-hidden shadow-sm mt-[20%] bg-gray-200">
-                   <img src="https://images.unsplash.com/photo-1499856871958-5b9627545d1a?q=80&w=800" alt="Paris" className="absolute inset-0 w-full h-full object-cover" style={{ transform: 'skewX(15deg) scale(1.25)' }} />
-                </div>
-                
-             </div>
-
-             {/* Strong Gradient Overlay for bottom fade */}
-             <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-[#E5F0E0] via-[#E5F0E0]/90 to-transparent pointer-events-none z-10"></div>
+          <div className="w-full overflow-hidden sticky top-[80px] z-0">
+            <motion.div
+              className="py-6 md:py-8 h-[52vh] md:h-[70vh] min-h-[340px] max-h-[760px] origin-top"
+              style={{ opacity: heroOpacity, scale: heroScale, filter: heroBlur, pointerEvents: heroPointer }}
+            >
+              <div className="flex gap-2.5 md:gap-4 h-full w-[116%] -ml-[8%]" style={{ transform: 'skewX(-12deg)' }}>
+                {HERO_COLUMNS.map((col, c) => (
+                  <div
+                    key={c}
+                    className={`${col.mobile ? 'flex' : 'hidden md:flex'} flex-col gap-2.5 md:gap-4 min-w-0`}
+                    style={{ flex: `${col.grow} 1 0` }}
+                  >
+                    <div aria-hidden="true" style={{ flex: `${col.padTop} 1 0` }} />
+                    {col.tiles.map((tile, t) => (
+                      <div
+                        key={t}
+                        className={`hero-tile relative overflow-hidden bg-[#d6e7cc] shadow-md cursor-pointer transition-all duration-500 ease-out hover:z-20 hover:scale-[1.08] hover:-translate-y-2 hover:shadow-2xl hover:shadow-[#152010]/30 group/tile ${tile.align}`}
+                        style={{ flex: `${tile.grow} 1 0`, width: `${tile.width}%`, minHeight: 0 }}
+                      >
+                        <img
+                          src={tile.src}
+                          alt={tile.alt}
+                          className="absolute top-0 h-full max-w-none -left-1/2 w-[200%] object-cover"
+                          style={{ transform: 'skewX(12deg)' }}
+                        />
+                        <div className="absolute inset-0 bg-[#152010]/0 group-hover/tile:bg-[#152010]/10 transition-colors duration-500" />
+                      </div>
+                    ))}
+                    <div aria-hidden="true" style={{ flex: `${col.padBottom} 1 0` }} />
+                  </div>
+                ))}
+              </div>
+            </motion.div>
           </div>
         )}
 
@@ -1165,19 +1464,7 @@ export default function Landing() {
         {currentView === 'trip' && tripTab === 'settings' && renderUserSettings()}
       </main>
 
-      <footer className="bg-[#111111] border-t border-[#1f1f1f] mt-16">
-        <div className="max-w-6xl mx-auto px-6 py-10 flex flex-col md:flex-row gap-6 md:items-center md:justify-between">
-          <div>
-            <p className="text-[#c6e3b6] text-2xl md:text-3xl font-black tracking-wider">TRAVERSEHUB</p>
-            <p className="text-sm text-gray-400 mt-1">Plan smarter trips with itinerary, budget, and sharing in one place.</p>
-          </div>
-          <div className="flex items-center gap-5 text-sm text-gray-400">
-            <span className="hover:text-white transition-colors cursor-pointer">About</span>
-            <span className="hover:text-white transition-colors cursor-pointer">Contact</span>
-            <span className="hover:text-white transition-colors cursor-pointer">Privacy</span>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter />
 
       {/* Advanced Search Modal */}
       {isAdvancedSearchOpen && (

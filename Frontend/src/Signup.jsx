@@ -113,7 +113,7 @@ export default function Signup() {
               </div>
 
               <h1 className="text-2xl font-bold text-gray-900 mb-1 tracking-tight">
-                {isLogin ? 'Welcome Back' : 'Join Explore'}
+                {isLogin ? 'Welcome Back' : 'Join Travelloop'}
               </h1>
               <p className="text-gray-500 text-sm mb-4">
                 {isLogin ? 'Please enter your details to sign in.' : 'This is the start of something good.'}
