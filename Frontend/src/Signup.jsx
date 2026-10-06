@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import axios from "axios";
+import { registerUser, loginUser } from './api';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Grid, MapPin, Eye, EyeOff, Check, X, Navigation, Mountain } from 'lucide-react';
 import forestImg from './assets/forest.png';
@@ -42,10 +42,7 @@ export default function Signup() {
     }
     setLoading(true);
     try {
-      const response = await axios.post(
-        "http://localhost:5001/api/auth/register",
-        { name, email, password }
-      );
+      const response = await registerUser({ name, email, password });
       console.log(response.data);
       localStorage.setItem("token", response.data.token);
       localStorage.setItem("user", JSON.stringify(response.data.user));
@@ -66,10 +63,7 @@ export default function Signup() {
     }
     setLoading(true);
     try {
-      const response = await axios.post(
-        "http://localhost:5001/api/auth/login",
-        { identifier: email, password }
-      );
+      const response = await loginUser({ identifier: email, password });
       console.log(response.data);
       localStorage.setItem("token", response.data.token);
       localStorage.setItem("user", JSON.stringify(response.data.user));

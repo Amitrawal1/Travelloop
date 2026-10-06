@@ -1,12 +1,6 @@
 import axios from 'axios';
 
-const API_BASE = 'http://localhost:5001/api';
-
-// Helper to get auth header
-const authHeader = () => {
-  const token = localStorage.getItem('token');
-  return token ? { Authorization: `Bearer ${token}` } : {};
-};
+export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 
 const api = axios.create({
   baseURL: API_BASE,
@@ -59,6 +53,10 @@ export const deletePackingItem = (tripId, itemId) => api.delete(`/trips/${tripId
 // ─── NOTES ────────────────────────────
 export const addNote = (tripId, data) => api.post(`/trips/${tripId}/notes`, data);
 export const deleteNote = (tripId, noteId) => api.delete(`/trips/${tripId}/notes/${noteId}`);
+
+// ─── AI DISCOVERY ─────────────────────
+export const generateSuggestions = (data) => api.post('/ai/generate', data);
+export const getDestinations = () => api.get('/ai/destinations');
 
 // ─── SHARE ────────────────────────────
 export const generateShareLink = (tripId) => api.post(`/trips/${tripId}/share`);

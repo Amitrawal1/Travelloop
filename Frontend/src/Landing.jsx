@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, MapPin, Calendar, User, Plus, Map as MapIcon, DollarSign, Share2, Copy, Send, ChevronDown, Layers, SlidersHorizontal, ArrowUpDown, Settings, LogOut, X, NotebookPen, ListChecks, Globe2, Activity, ClipboardCheck, BarChart3 } from 'lucide-react';
+import { Search, MapPin, Calendar, User, Plus, Map as MapIcon, DollarSign, Share2, Copy, Send, ChevronDown, Layers, SlidersHorizontal, ArrowUpDown, Settings, LogOut, X, NotebookPen, ListChecks, Globe2, Activity, ClipboardCheck, BarChart3, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import * as api from './api';
 
@@ -282,6 +282,19 @@ export default function Landing() {
 
   const renderDashboard = () => (
     <div className="max-w-6xl mx-auto px-6 py-12">
+      {/* AI destination discovery entry point */}
+      <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl bg-[#152010] text-white px-6 py-5 shadow-lg">
+        <div>
+          <p className="font-bold text-lg">Not sure where to go?</p>
+          <p className="text-sm text-white/70">Find the best Indian destinations for your dates, with crowd forecasts.</p>
+        </div>
+        <button
+          onClick={() => navigate('/create-trip')}
+          className="shrink-0 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full bg-[#a3ff00] text-black font-bold hover:scale-105 active:scale-95 transition-transform"
+        >
+          <Sparkles size={16} /> Discover with AI
+        </button>
+      </div>
       {/* Search and Filter Row */}
       <div className="flex flex-col md:flex-row gap-4 mb-12">
          {/* Search Bar */}
@@ -743,7 +756,12 @@ export default function Landing() {
   const renderCreateTrip = () => (
     <div className="max-w-4xl mx-auto px-6 py-12">
       <div className="bg-white border border-[#d6e7cc] rounded-2xl p-6 md:p-8 shadow-sm">
-        <h2 className="text-2xl font-black text-[#152010] mb-6">Create New Trip</h2>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+          <h2 className="text-2xl font-black text-[#152010]">Create New Trip</h2>
+          <button onClick={() => navigate('/create-trip')} className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#152010] text-[#a3ff00] text-sm font-bold hover:bg-[#22331a] transition-colors">
+            <Sparkles size={14} /> Find the best place for your dates
+          </button>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <input value={newTrip.name} onChange={(e) => setNewTrip({...newTrip, name: e.target.value})} className="bg-[#f8fcf5] border border-[#d6e7cc] rounded-xl px-4 py-3 outline-none focus:border-[#749962]" placeholder="Trip name" />
           <input value={newTrip.destination} onChange={(e) => setNewTrip({...newTrip, destination: e.target.value})} className="bg-[#f8fcf5] border border-[#d6e7cc] rounded-xl px-4 py-3 outline-none focus:border-[#749962]" placeholder="Destination / Region" />
