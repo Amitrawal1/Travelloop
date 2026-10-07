@@ -19,6 +19,7 @@ api.interceptors.request.use((config) => {
 // ─── AUTH ─────────────────────────────
 export const registerUser = (data) => api.post('/auth/register', data);
 export const loginUser = (data) => api.post('/auth/login', data);
+export const googleLogin = (accessToken) => api.post('/auth/google', { accessToken });
 
 // ─── USER ─────────────────────────────
 export const getProfile = () => api.get('/user/profile');

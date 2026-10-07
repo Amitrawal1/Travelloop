@@ -337,15 +337,25 @@ export default function Landing() {
     }
   };
 
+  // Accounts created with Google have no password until they set one here
+  const needsCurrentPassword = user?.hasPassword !== false;
+
   const handleChangePassword = async () => {
-    if (!passwordForm.currentPassword || passwordForm.newPassword.length < 6) {
-      setSettingsStatus({ type: 'error', text: 'Enter your current password and a new password of at least 6 characters.' });
+    if ((needsCurrentPassword && !passwordForm.currentPassword) || passwordForm.newPassword.length < 6) {
+      setSettingsStatus({ type: 'error', text: needsCurrentPassword
+        ? 'Enter your current password and a new password of at least 6 characters.'
+        : 'Enter a password of at least 6 characters.' });
       return;
     }
     try {
       await api.changePassword(passwordForm);
       setPasswordForm({ currentPassword: '', newPassword: '' });
-      setSettingsStatus({ type: 'success', text: 'Password updated.' });
+      if (!needsCurrentPassword) {
+        const updated = { ...user, hasPassword: true };
+        setUser(updated);
+        localStorage.setItem('user', JSON.stringify(updated));
+      }
+      setSettingsStatus({ type: 'success', text: needsCurrentPassword ? 'Password updated.' : 'Password set. You can now also sign in with your email and password.' });
     } catch (err) {
       setSettingsStatus({ type: 'error', text: err.response?.data?.message || 'Failed to update password.' });
     }
@@ -1061,18 +1071,21 @@ export default function Landing() {
         <button onClick={handleUpdateProfile} className="mt-5 px-5 py-3 rounded-xl bg-[#749962] text-white font-bold hover:bg-[#608250] transition-colors">Save profile</button>
       </div>
       <div className="bg-white border border-[#d6e7cc] rounded-2xl p-6">
-        <h3 className="font-bold text-[#152010] mb-4">Change password</h3>
+        <h3 className="font-bold text-[#152010] mb-1">{needsCurrentPassword ? 'Change password' : 'Set a password'}</h3>
+        <p className="text-sm text-[#608250] mb-4">{needsCurrentPassword ? 'Use at least 6 characters.' : 'You signed up with Google. Add a password to also sign in with your email.'}</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          <div>
-            <label htmlFor="settings-current-pw" className="text-xs font-bold text-[#608250] uppercase tracking-wider mb-1 block">Current password</label>
-            <input id="settings-current-pw" type="password" autoComplete="current-password" value={passwordForm.currentPassword} onChange={(e) => setPasswordForm({...passwordForm, currentPassword: e.target.value})} className="w-full bg-[#f8fcf5] border border-[#d6e7cc] rounded-xl px-4 py-3 outline-none focus:border-[#749962]" />
-          </div>
+          {needsCurrentPassword && (
+            <div>
+              <label htmlFor="settings-current-pw" className="text-xs font-bold text-[#608250] uppercase tracking-wider mb-1 block">Current password</label>
+              <input id="settings-current-pw" type="password" autoComplete="current-password" value={passwordForm.currentPassword} onChange={(e) => setPasswordForm({...passwordForm, currentPassword: e.target.value})} className="w-full bg-[#f8fcf5] border border-[#d6e7cc] rounded-xl px-4 py-3 outline-none focus:border-[#749962]" />
+            </div>
+          )}
           <div>
             <label htmlFor="settings-new-pw" className="text-xs font-bold text-[#608250] uppercase tracking-wider mb-1 block">New password</label>
             <input id="settings-new-pw" type="password" autoComplete="new-password" value={passwordForm.newPassword} onChange={(e) => setPasswordForm({...passwordForm, newPassword: e.target.value})} className="w-full bg-[#f8fcf5] border border-[#d6e7cc] rounded-xl px-4 py-3 outline-none focus:border-[#749962]" placeholder="At least 6 characters" />
           </div>
         </div>
-        <button onClick={handleChangePassword} className="mt-5 px-5 py-3 rounded-xl bg-[#152010] text-white font-bold hover:bg-[#749962] transition-colors">Update password</button>
+        <button onClick={handleChangePassword} className="mt-5 px-5 py-3 rounded-xl bg-[#152010] text-white font-bold hover:bg-[#749962] transition-colors">{needsCurrentPassword ? 'Update password' : 'Set password'}</button>
       </div>
     </div>
   );
@@ -1240,8 +1253,10 @@ export default function Landing() {
 
           <div className="px-6 md:px-8 pb-6 md:pb-8">
             <div className="flex flex-col md:flex-row md:items-end gap-4 md:gap-6">
-              <div className="relative -mt-14 w-28 h-28 rounded-full border-4 border-white bg-gradient-to-br from-[#a3ff00] to-[#749962] flex items-center justify-center text-4xl font-black text-[#152010] shadow-lg shrink-0">
-                {user?.name?.charAt(0).toUpperCase() || 'U'}
+              <div className="relative -mt-14 w-28 h-28 rounded-full border-4 border-white bg-gradient-to-br from-[#a3ff00] to-[#749962] flex items-center justify-center text-4xl font-black text-[#152010] shadow-lg shrink-0 overflow-hidden">
+                {user?.avatar
+                  ? <img src={user.avatar} alt="" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+                  : user?.name?.charAt(0).toUpperCase() || 'U'}
               </div>
 
               <div className="flex-1 min-w-0 md:pb-1">
@@ -1396,7 +1411,9 @@ export default function Landing() {
       
       {/* Fixed Profile Circle with high z-index */}
       <div className="fixed top-6 right-6 z-[100] w-12 h-12 rounded-full bg-white border-2 border-gray-200 shadow-md flex items-center justify-center text-lg font-bold text-gray-700 cursor-pointer group hover:border-[#749962] transition-colors">
-        {user?.name?.charAt(0).toUpperCase() || 'U'}
+        {user?.avatar
+          ? <img src={user.avatar} alt="" referrerPolicy="no-referrer" className="w-full h-full rounded-full object-cover" />
+          : user?.name?.charAt(0).toUpperCase() || 'U'}
         {/* Dropdown menu */}
         <div 
           className="absolute top-14 right-0 bg-white border border-gray-200 rounded-xl shadow-xl py-2 w-56 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all flex flex-col"

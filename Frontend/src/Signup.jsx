@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
-import { registerUser, loginUser } from './api';
+import { registerUser, loginUser, googleLogin } from './api';
+import { loadGoogleScript, requestGoogleAccessToken } from './utils/googleAuth';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Eye, EyeOff, Check, X } from 'lucide-react';
 import forestImg from './assets/forest.jpg';
@@ -30,6 +31,7 @@ export default function Signup() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const navigate = useNavigate();
   const [error, setError] = useState('');
 
@@ -37,6 +39,11 @@ export default function Signup() {
   useEffect(() => {
     if (localStorage.getItem('token') && localStorage.getItem('user')) navigate('/dashboard', { replace: true });
   }, [navigate]);
+
+  // Preload Google's script so the popup opens immediately on click
+  useEffect(() => {
+    loadGoogleScript().catch(() => {});
+  }, []);
 
   const passwordStrength = useMemo(() => getPasswordStrength(password), [password]);
 
@@ -73,6 +80,22 @@ export default function Signup() {
       setError(error.response?.data?.message || "Sign in failed. Please check your details.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoogle = async () => {
+    setError('');
+    setGoogleLoading(true);
+    try {
+      const accessToken = await requestGoogleAccessToken();
+      const response = await googleLogin(accessToken);
+      localStorage.setItem("token", response.data.token);
+      localStorage.setItem("user", JSON.stringify(response.data.user));
+      navigate("/dashboard");
+    } catch (error) {
+      setError(error.response?.data?.message || error.message || "Google sign-in failed. Please try again.");
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
@@ -214,7 +237,7 @@ export default function Signup() {
               {/* Submit Button */}
               <button
                 onClick={handleSubmit}
-                disabled={loading}
+                disabled={loading || googleLoading}
                 className="w-full mt-5 bg-[#0E190A] text-white rounded-2xl py-3 font-bold relative overflow-hidden group shadow-[0_8px_30px_rgb(0,0,0,0.12)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.2)] transition disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <div className="absolute inset-0 opacity-20 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPgo8cmVjdCB3aWR0aD0iOCIgaGVpZ2h0PSI4IiBmaWxsPSIjMDAwIiBmaWxsLW9wYWNpdHk9IjAiPjwvcmVjdD4KPGNpcmNsZSBjeD0iNCIgY3k9IjQiIHI9IjAuNSIgZmlsbD0iI2ZmZiI+PC9jaXJjbGU+Cjwvc3ZnPg==')]"></div>
@@ -228,6 +251,33 @@ export default function Signup() {
                     isLogin ? 'Sign In' : 'Start your adventure'
                   )}
                 </span>
+              </button>
+
+              <div className="w-full flex items-center gap-3 my-3 text-xs text-gray-400">
+                <span className="h-px flex-1 bg-gray-200" /> or <span className="h-px flex-1 bg-gray-200" />
+              </div>
+
+              {/* Continue with Google */}
+              <button
+                type="button"
+                onClick={handleGoogle}
+                disabled={loading || googleLoading}
+                className="w-full bg-white text-gray-800 border border-gray-200 rounded-2xl py-3 font-bold flex items-center justify-center gap-3 shadow-sm hover:bg-gray-50 hover:border-gray-300 transition disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {googleLoading ? (
+                  <svg className="animate-spin h-5 w-5 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                ) : (
+                  <svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true">
+                    <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />
+                    <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" />
+                    <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z" />
+                    <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z" />
+                  </svg>
+                )}
+                Continue with Google
               </button>
 
             </div>

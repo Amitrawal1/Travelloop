@@ -13,9 +13,19 @@ const userSchema = new mongoose.Schema(
             unique: true,
         },
 
+        // Not set for accounts created with "Continue with Google" until the user adds one
         password: {
             type: String,
-            required: true,
+        },
+
+        googleId: {
+            type: String,
+            unique: true,
+            sparse: true,
+        },
+
+        avatar: {
+            type: String,
         },
     },
     {

@@ -1,15 +1,17 @@
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
+const { publicUser } = require('./authController');
 
 // @desc   Get user profile
 // @route  GET /api/user/profile
 const getProfile = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).select('-password');
+    const user = await User.findById(req.user._id);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
-    res.json(user);
+    const { password, ...profile } = user.toObject();
+    res.json({ ...profile, hasPassword: Boolean(password) });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -39,11 +41,7 @@ const updateProfile = async (req, res) => {
 
     const updatedUser = await user.save();
 
-    res.json({
-      id: updatedUser._id,
-      name: updatedUser.name,
-      email: updatedUser.email
-    });
+    res.json(publicUser(updatedUser));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -60,13 +58,19 @@ const changePassword = async (req, res) => {
 
     const { currentPassword, newPassword } = req.body;
 
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({ message: 'Current and new passwords are required' });
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({ message: 'New password must be at least 6 characters' });
     }
 
-    const isMatch = await bcrypt.compare(currentPassword, user.password);
-    if (!isMatch) {
-      return res.status(400).json({ message: 'Current password is incorrect' });
+    // Google-only accounts have no password yet, so they can set one without the current one
+    if (user.password) {
+      if (!currentPassword) {
+        return res.status(400).json({ message: 'Current and new passwords are required' });
+      }
+      const isMatch = await bcrypt.compare(currentPassword, user.password);
+      if (!isMatch) {
+        return res.status(400).json({ message: 'Current password is incorrect' });
+      }
     }
 
     const salt = await bcrypt.genSalt(10);
