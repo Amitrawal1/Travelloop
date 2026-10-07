@@ -4,7 +4,6 @@ import { motion, useScroll, useTransform } from 'framer-motion';
 import { ArrowRight, CalendarDays, Sparkles, Route, MapPin, Users } from 'lucide-react';
 import StickyStepCard from './components/landing/StickyStepCard';
 import { STEPS } from './components/landing/steps';
-import HeroCollage from './components/HeroCollage';
 import Logo from './components/Logo';
 import SiteFooter from './components/SiteFooter';
 
@@ -23,10 +22,6 @@ export default function IntroPage() {
   // Page background: dark green → light green as the last feature card arrives
   const { scrollYProgress: cardsProgress } = useScroll({ target: cardsRef, offset: ['start start', 'end end'] });
   const cardsBackground = useTransform(cardsProgress, [0.7, 1], ['#152010', '#c6e3b6']);
-
-  // Hero collage fades into the background as you scroll past it
-  const { scrollY } = useScroll();
-  const collageOpacity = useTransform(scrollY, [0, 500], [1, 0.15]);
 
   return (
     <div className="min-h-screen bg-[#152010] text-white font-sans">
@@ -58,7 +53,7 @@ export default function IntroPage() {
       {/* ─── HERO ─── */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_70%_55%_at_50%_0%,rgba(163,255,0,0.12)_0%,rgba(116,153,98,0.08)_40%,transparent_75%)]" />
-        <div className="relative max-w-4xl mx-auto px-6 pt-16 md:pt-24 text-center">
+        <div className="relative max-w-4xl mx-auto px-6 pt-20 md:pt-32 pb-8 md:pb-12 text-center">
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
             <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-white/15 bg-white/5 text-xs md:text-sm text-[#c6e3b6]">
               <Sparkles size={14} className="text-[#a3ff00]" /> Crowd forecasts for 65+ Indian destinations
@@ -83,14 +78,6 @@ export default function IntroPage() {
             </div>
           </motion.div>
         </div>
-
-        <motion.div
-          className="relative mt-14 md:mt-16 h-[44vh] md:h-[60vh] min-h-[300px] max-h-[620px] overflow-hidden"
-          style={{ opacity: collageOpacity }}
-        >
-          <HeroCollage />
-          <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-[#152010] to-transparent pointer-events-none" />
-        </motion.div>
       </section>
 
       {/* ─── EXAMPLE FORECAST ─── */}
