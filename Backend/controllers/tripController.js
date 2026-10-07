@@ -1,6 +1,9 @@
 const Trip = require('../models/Trip');
 const crypto = require('crypto');
 
+// Trips are "upcoming" until their end date has passed (dates are stored as YYYY-MM-DD strings).
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
 // ─── TRIP CRUD ────────────────────────────────────────────
 
 // @desc   Create a new trip
@@ -49,7 +52,11 @@ const getTrips = async (req, res) => {
 // @route  GET /api/trips/upcoming
 const getUpcomingTrips = async (req, res) => {
   try {
-    const trips = await Trip.find({ user: req.user._id, status: 'upcoming' }).sort({ createdAt: -1 });
+    const trips = await Trip.find({
+      user: req.user._id,
+      status: { $ne: 'previous' },
+      $or: [{ endDate: '' }, { endDate: { $gte: todayISO() } }]
+    }).sort({ startDate: 1, createdAt: -1 });
     res.json(trips);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -60,7 +67,10 @@ const getUpcomingTrips = async (req, res) => {
 // @route  GET /api/trips/previous
 const getPreviousTrips = async (req, res) => {
   try {
-    const trips = await Trip.find({ user: req.user._id, status: 'previous' }).sort({ createdAt: -1 });
+    const trips = await Trip.find({
+      user: req.user._id,
+      $or: [{ status: 'previous' }, { endDate: { $ne: '', $lt: todayISO() } }]
+    }).sort({ endDate: -1 });
     res.json(trips);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -135,6 +145,25 @@ const addDay = async (req, res) => {
     const { date } = req.body;
 
     trip.days.push({ dayNumber, date: date || '', stops: [] });
+    await trip.save();
+    res.json(trip);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc   Delete a day (remaining days are renumbered)
+// @route  DELETE /api/trips/:id/days/:dayId
+const deleteDay = async (req, res) => {
+  try {
+    const trip = await Trip.findOne({ _id: req.params.id, user: req.user._id });
+    if (!trip) return res.status(404).json({ message: 'Trip not found' });
+
+    const day = trip.days.id(req.params.dayId);
+    if (!day) return res.status(404).json({ message: 'Day not found' });
+
+    day.deleteOne();
+    trip.days.forEach((d, i) => { d.dayNumber = i + 1; });
     await trip.save();
     res.json(trip);
   } catch (error) {
@@ -354,7 +383,7 @@ const generateShareLink = async (req, res) => {
 
     res.json({
       shareCode: trip.shareCode,
-      shareUrl: `https://traversehub.app/t/${trip.shareCode}`
+      shareUrl: `${process.env.CLIENT_URL || req.get('origin') || ''}/t/${trip.shareCode}`
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -408,6 +437,7 @@ module.exports = {
   updateTrip,
   deleteTrip,
   addDay,
+  deleteDay,
   addStop,
   updateStop,
   deleteStop,

@@ -37,6 +37,7 @@ export const deleteTrip = (id) => api.delete(`/trips/${id}`);
 
 // ─── ITINERARY ────────────────────────
 export const addDay = (tripId, data) => api.post(`/trips/${tripId}/days`, data);
+export const deleteDay = (tripId, dayId) => api.delete(`/trips/${tripId}/days/${dayId}`);
 export const addStop = (tripId, dayId, data) => api.post(`/trips/${tripId}/days/${dayId}/stops`, data);
 export const updateStop = (tripId, dayId, stopId, data) => api.put(`/trips/${tripId}/days/${dayId}/stops/${stopId}`, data);
 export const deleteStop = (tripId, dayId, stopId) => api.delete(`/trips/${tripId}/days/${dayId}/stops/${stopId}`);

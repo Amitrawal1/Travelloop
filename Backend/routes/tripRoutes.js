@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
 const { protect } = require('../middleware/authMiddleware');
 const {
@@ -10,6 +11,7 @@ const {
   updateTrip,
   deleteTrip,
   addDay,
+  deleteDay,
   addStop,
   updateStop,
   deleteStop,
@@ -24,6 +26,14 @@ const {
   getPublicTrip,
   searchTrips
 } = require('../controllers/tripController');
+
+// Reject malformed ids with 404 instead of letting Mongoose throw a CastError (500)
+for (const param of ['id', 'dayId', 'stopId', 'itemId', 'noteId']) {
+  router.param(param, (req, res, next, value) => {
+    if (!mongoose.isValidObjectId(value)) return res.status(404).json({ message: 'Not found' });
+    next();
+  });
+}
 
 // Public route (no auth)
 router.get('/public/:shareCode', getPublicTrip);
@@ -43,6 +53,7 @@ router.delete('/:id', deleteTrip);
 
 // Itinerary (Days & Stops)
 router.post('/:id/days', addDay);
+router.delete('/:id/days/:dayId', deleteDay);
 router.post('/:id/days/:dayId/stops', addStop);
 router.put('/:id/days/:dayId/stops/:stopId', updateStop);
 router.delete('/:id/days/:dayId/stops/:stopId', deleteStop);

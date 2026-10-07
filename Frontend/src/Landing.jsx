@@ -1,9 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Search, MapPin, Calendar, User, Plus, Map as MapIcon, DollarSign, Share2, Copy, Send, ChevronDown, Layers, SlidersHorizontal, ArrowUpDown, Settings, LogOut, X, NotebookPen, ListChecks, Globe2, Activity, ClipboardCheck, BarChart3, Sparkles, Mail, Pencil, Award, Plane, Clock, Wallet, Compass, Lock, CalendarDays, Check, Backpack, Route, ArrowRight } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Search, MapPin, Calendar, User, Plus, Map as MapIcon, Share2, Copy, Send, ArrowUpDown, Settings, LogOut, NotebookPen, ListChecks, Globe2, ClipboardCheck, BarChart3, Sparkles, Mail, Pencil, Award, Plane, Clock, Wallet, Compass, Lock, CalendarDays, Check, Backpack, Route, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion, useScroll, useTransform } from 'framer-motion';
 import * as api from './api';
 import Logo from './components/Logo';
+import TripReadOnly from './components/TripReadOnly';
+import HeroCollage from './components/HeroCollage';
+import { formatINR } from './utils/format';
 import SiteFooter from './components/SiteFooter';
 
 // Whole days from today until a YYYY-MM-DD date (negative if in the past).
@@ -14,76 +17,18 @@ const daysUntil = (dateStr) => {
   return Math.round((target - today) / 86400000);
 };
 
-const HERO_PHOTOS = [
-  ['1464822759023-fed622ff2c3b', 'Mountains'],
-  ['1602216056096-3b40cc0c9944', 'Kerala backwaters'],
-  ['1477587458883-47145ed94245', 'Hawa Mahal, Jaipur'],
-  ['1551641506-ee5bf4cb45f1', 'Tokyo at night'],
-  ['1512343879784-a960bf40e7f2', 'Goa beach'],
-  ['1499678329028-101435549a4e', 'Cinque Terre'],
-  ['1564507592333-c60657eea523', 'Taj Mahal'],
-  ['1626621341517-bbf3d9990a23', 'Snow trek'],
-  ['1537996194471-e657df975ab4', 'Bali temple'],
-  ['1514222134-b57cbb8ce073', 'Golden Temple, Amritsar'],
-  ['1499856871958-5b9627545d1a', 'Paris'],
-  ['1470071459604-3b5ec3a7fe05', 'Green valley'],
-  ['1573843981267-be1999ff37cd', 'Maldives'],
-  ['1599661046289-e31897846e41', 'Amber Fort'],
-  ['1493976040374-85c8e12f0c0e', 'Kyoto street'],
-  ['1501785888041-af3ef285b470', 'Mountain lake'],
-  ['1548661710-7f540c9c56d6', 'Singapore skyline'],
-  ['1531366936337-7c912a4589a7', 'Northern lights'],
-  ['1593693411515-c20261bcad6e', 'Houseboat'],
-  ['1587595431973-160d0d94add1', 'Machu Picchu'],
-  ['1507525428034-b723cf961d3e', 'Beach sunset'],
-  ['1540959733332-eab4deabeeaf', 'Tokyo crossing'],
-  ['1469474968028-56623f02e42e', 'Misty hills'],
-  ['1533105079780-92b9be482077', 'Santorini'],
-  ['1561361513-2d000a50f0dc', 'Road trip'],
-];
-
-// Small seeded PRNG so the "random" collage looks organic but stays identical on every render.
-const seededRandom = (seed) => () => {
-  seed = (seed + 0x6d2b79f5) | 0;
-  let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-};
-
-// Tilted full-width hero collage: columns of varying width, each with 1–3 tiles of varying height/width/offset.
-const HERO_COLUMNS = (() => {
-  const rand = seededRandom(20261006);
-  let photo = 0;
-  const total = 7;
-  return Array.from({ length: total }, (_, c) => {
-    const r = rand();
-    const count = r < 0.4 ? 1 : 2;
-    return {
-      grow: 0.85 + rand() * 0.6,
-      // Spacer weights relative to tiles (~1 each) give each column a random vertical offset.
-      padTop: rand() * 0.3,
-      padBottom: rand() * 0.25,
-      mobile: c < 4,
-      tiles: Array.from({ length: count }, () => {
-        const [id, alt] = HERO_PHOTOS[photo++ % HERO_PHOTOS.length];
-        return {
-          src: `https://images.unsplash.com/photo-${id}?q=75&w=600`,
-          alt,
-          grow: 0.6 + rand(),
-          width: 92 + Math.round(rand() * 8),
-          align: rand() < 0.5 ? 'self-start' : 'self-end',
-        };
-      }),
-    };
-  });
-})();
 
 
 export default function Landing() {
   const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard' | 'trip' | 'profile'
   const [tripTab, setTripTab] = useState('itinerary'); // itinerary | budget | share | create | mytrips | itineraryview | citysearch | activitysearch | packing | notes | settings | public
-  const [isAdvancedSearchOpen, setIsAdvancedSearchOpen] = useState(false);
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('user')) || null;
+    } catch {
+      return null;
+    }
+  });
   const navigate = useNavigate();
 
   // Hero collage fades, shrinks slightly and blurs into the background as the page scrolls over it.
@@ -109,7 +54,7 @@ export default function Landing() {
   const [settingsForm, setSettingsForm] = useState({ name: '', email: '' });
 
   // Share
-  const [shareUrl, setShareUrl] = useState('');
+  const [shareStatus, setShareStatus] = useState('');
 
   // Packing
   const [newPackingItem, setNewPackingItem] = useState('');
@@ -121,7 +66,18 @@ export default function Landing() {
   const [newBudget, setNewBudget] = useState({ category: 'transport', name: '', amount: '' });
 
   // Itinerary
-  const [newStop, setNewStop] = useState({ title: '', time: '', type: 'activity' });
+  const [stopDrafts, setStopDrafts] = useState({}); // per-day "add stop" form state, keyed by day id
+
+  // Dashboard sorting
+  const [tripSort, setTripSort] = useState('soonest');
+
+  // Explore places
+  const [destinations, setDestinations] = useState([]);
+  const [placeQuery, setPlaceQuery] = useState('');
+
+  // Password change
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '' });
+  const [settingsStatus, setSettingsStatus] = useState(null);
 
   // Profile
   const [profileDetails, setProfileDetails] = useState(null);
@@ -129,31 +85,37 @@ export default function Landing() {
   const [profileStatus, setProfileStatus] = useState(null);
 
   useEffect(() => {
-    const userData = localStorage.getItem('user');
-    if (userData) {
-      setUser(JSON.parse(userData));
-    } else {
-      navigate('/auth');
-    }
-  }, [navigate]);
+    if (!user) navigate('/auth');
+  }, [user, navigate]);
 
   // ─── Data Fetching ──────────────────────────────────────
-  const fetchTrips = useCallback(async () => {
-    try {
-      const [upRes, prevRes] = await Promise.all([
-        api.getUpcomingTrips(),
-        api.getPreviousTrips()
-      ]);
-      setTrips(upRes.data);
-      setPreviousTrips(prevRes.data);
-    } catch (err) {
-      console.error('Failed to fetch trips:', err);
-    }
-  }, []);
+  const fetchTrips = useCallback(() =>
+    Promise.all([api.getUpcomingTrips(), api.getPreviousTrips()])
+      .then(([upRes, prevRes]) => {
+        setTrips(upRes.data);
+        setPreviousTrips(prevRes.data);
+      })
+      .catch((err) => {
+        // Expired/invalid session: send the user back to sign in
+        if (err.response?.status === 401) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          navigate('/auth');
+        } else {
+          console.error('Failed to fetch trips:', err);
+        }
+      }), [navigate]);
 
   useEffect(() => {
     if (user) fetchTrips();
   }, [user, fetchTrips]);
+
+  useEffect(() => {
+    if (tripTab !== 'citysearch' || destinations.length) return;
+    api.getDestinations()
+      .then((res) => setDestinations(res.data.destinations || []))
+      .catch((err) => console.error('Failed to load destinations:', err));
+  }, [tripTab, destinations.length]);
 
   useEffect(() => {
     if (currentView !== 'profile') return;
@@ -176,8 +138,10 @@ export default function Landing() {
       setLoading(true);
       const res = await api.getTripById(id);
       setSelectedTrip(res.data);
+      setShareStatus('');
       setCurrentView('trip');
       setTripTab('itinerary');
+      window.scrollTo(0, 0);
     } catch (err) {
       console.error('Failed to load trip:', err);
     } finally {
@@ -189,10 +153,13 @@ export default function Landing() {
     if (!newTrip.name) return alert('Trip name is required');
     try {
       setLoading(true);
-      await api.createTrip(newTrip);
+      const res = await api.createTrip(newTrip);
       setNewTrip({ name: '', destination: '', startDate: '', endDate: '', description: '' });
       await fetchTrips();
-      setCurrentView('dashboard');
+      // Open the new trip straight in the builder
+      setSelectedTrip(res.data);
+      setTripTab('itinerary');
+      window.scrollTo(0, 0);
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to create trip');
     } finally {
@@ -209,7 +176,7 @@ export default function Landing() {
         setSelectedTrip(null);
         setCurrentView('dashboard');
       }
-    } catch (err) {
+    } catch {
       alert('Failed to delete trip');
     }
   };
@@ -227,21 +194,43 @@ export default function Landing() {
 
   const handleAddDay = async () => {
     if (!selectedTrip) return;
+    // Default the new day's date to the next calendar day after the trip start
+    let date = '';
+    if (selectedTrip.startDate) {
+      const d = new Date(`${selectedTrip.startDate}T00:00:00`);
+      d.setDate(d.getDate() + selectedTrip.days.length);
+      date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
     try {
-      const res = await api.addDay(selectedTrip._id, { date: '' });
+      const res = await api.addDay(selectedTrip._id, { date });
       setSelectedTrip(res.data);
-    } catch (err) {
+    } catch {
       alert('Failed to add day');
     }
   };
 
-  const handleAddStop = async (dayId) => {
-    if (!newStop.title) return alert('Stop title is required');
+  const handleDeleteDay = async (dayId) => {
+    if (!window.confirm('Remove this day and all its stops?')) return;
     try {
-      const res = await api.addStop(selectedTrip._id, dayId, newStop);
+      const res = await api.deleteDay(selectedTrip._id, dayId);
       setSelectedTrip(res.data);
-      setNewStop({ title: '', time: '', type: 'activity' });
-    } catch (err) {
+    } catch {
+      alert('Failed to remove day');
+    }
+  };
+
+  const draftFor = (dayId) => stopDrafts[dayId] || { title: '', time: '', type: 'activity' };
+  const updateDraft = (dayId, patch) =>
+    setStopDrafts((d) => ({ ...d, [dayId]: { ...draftFor(dayId), ...patch } }));
+
+  const handleAddStop = async (dayId) => {
+    const draft = draftFor(dayId);
+    if (!draft.title.trim()) return;
+    try {
+      const res = await api.addStop(selectedTrip._id, dayId, draft);
+      setSelectedTrip(res.data);
+      setStopDrafts((d) => ({ ...d, [dayId]: { title: '', time: '', type: draft.type } }));
+    } catch {
       alert('Failed to add stop');
     }
   };
@@ -250,7 +239,7 @@ export default function Landing() {
     try {
       const res = await api.deleteStop(selectedTrip._id, dayId, stopId);
       setSelectedTrip(res.data);
-    } catch (err) {
+    } catch {
       alert('Failed to delete stop');
     }
   };
@@ -261,7 +250,7 @@ export default function Landing() {
       const res = await api.addBudgetItem(selectedTrip._id, { category: newBudget.category, name: newBudget.name, amount: Number(newBudget.amount) });
       setSelectedTrip(res.data);
       setNewBudget({ category: 'transport', name: '', amount: '' });
-    } catch (err) {
+    } catch {
       alert('Failed to add budget item');
     }
   };
@@ -270,7 +259,7 @@ export default function Landing() {
     try {
       const res = await api.deleteBudgetItem(selectedTrip._id, category, itemId);
       setSelectedTrip(res.data);
-    } catch (err) {
+    } catch {
       alert('Failed to delete budget item');
     }
   };
@@ -281,7 +270,7 @@ export default function Landing() {
       const res = await api.addPackingItem(selectedTrip._id, { item: newPackingItem });
       setSelectedTrip(res.data);
       setNewPackingItem('');
-    } catch (err) {
+    } catch {
       alert('Failed to add packing item');
     }
   };
@@ -290,7 +279,7 @@ export default function Landing() {
     try {
       const res = await api.togglePackingItem(selectedTrip._id, itemId);
       setSelectedTrip(res.data);
-    } catch (err) {
+    } catch {
       alert('Failed to toggle item');
     }
   };
@@ -299,7 +288,7 @@ export default function Landing() {
     try {
       const res = await api.deletePackingItem(selectedTrip._id, itemId);
       setSelectedTrip(res.data);
-    } catch (err) {
+    } catch {
       alert('Failed to delete packing item');
     }
   };
@@ -310,7 +299,7 @@ export default function Landing() {
       const res = await api.addNote(selectedTrip._id, { content: newNote });
       setSelectedTrip(res.data);
       setNewNote('');
-    } catch (err) {
+    } catch {
       alert('Failed to add note');
     }
   };
@@ -319,7 +308,7 @@ export default function Landing() {
     try {
       const res = await api.deleteNote(selectedTrip._id, noteId);
       setSelectedTrip(res.data);
-    } catch (err) {
+    } catch {
       alert('Failed to delete note');
     }
   };
@@ -328,30 +317,68 @@ export default function Landing() {
     if (!selectedTrip) return;
     try {
       const res = await api.generateShareLink(selectedTrip._id);
-      setShareUrl(res.data.shareUrl);
-    } catch (err) {
+      setSelectedTrip((t) => ({ ...t, shareCode: res.data.shareCode, isPublic: true }));
+    } catch {
       alert('Failed to generate share link');
     }
   };
 
-  const handleCopyShareLink = () => {
-    if (shareUrl) {
-      navigator.clipboard.writeText(shareUrl);
-      alert('Link copied to clipboard!');
+  const shareUrl = selectedTrip?.isPublic && selectedTrip?.shareCode
+    ? `${window.location.origin}/t/${selectedTrip.shareCode}`
+    : '';
+
+  const handleCopyShareLink = async () => {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setShareStatus('Link copied!');
+    } catch {
+      setShareStatus('Copy failed — select the link and copy it manually.');
     }
   };
 
-  const handleUpdateProfile = async () => {
+  const handleChangePassword = async () => {
+    if (!passwordForm.currentPassword || passwordForm.newPassword.length < 6) {
+      setSettingsStatus({ type: 'error', text: 'Enter your current password and a new password of at least 6 characters.' });
+      return;
+    }
     try {
-      const res = await api.updateProfile(settingsForm);
-      const updatedUser = res.data;
-      setUser(updatedUser);
-      localStorage.setItem('user', JSON.stringify(updatedUser));
-      alert('Profile updated!');
+      await api.changePassword(passwordForm);
+      setPasswordForm({ currentPassword: '', newPassword: '' });
+      setSettingsStatus({ type: 'success', text: 'Password updated.' });
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to update profile');
+      setSettingsStatus({ type: 'error', text: err.response?.data?.message || 'Failed to update password.' });
     }
   };
+
+  const openCreateTab = (prefill = {}) => {
+    setNewTrip({ name: '', destination: '', startDate: '', endDate: '', description: '', ...prefill });
+    setCurrentView('trip');
+    setTripTab('create');
+    window.scrollTo(0, 0);
+  };
+
+  const handleUpdateProfile = async () => {
+    const payload = {
+      name: settingsForm.name.trim() || user?.name,
+      email: settingsForm.email.trim() || user?.email,
+    };
+    try {
+      const res = await api.updateProfile(payload);
+      setUser(res.data);
+      localStorage.setItem('user', JSON.stringify(res.data));
+      setSettingsStatus({ type: 'success', text: 'Profile updated.' });
+    } catch (err) {
+      setSettingsStatus({ type: 'error', text: err.response?.data?.message || 'Failed to update profile.' });
+    }
+  };
+
+  const sortedTrips = [...trips].sort((a, b) => {
+    if (tripSort === 'name') return a.name.localeCompare(b.name);
+    if (tripSort === 'recent') return new Date(b.createdAt) - new Date(a.createdAt);
+    // soonest first; trips without dates go last
+    return (a.startDate || '9999') .localeCompare(b.startDate || '9999');
+  });
 
   // Helper: compute total budget for selectedTrip
   const getTotalBudget = () => {
@@ -391,82 +418,47 @@ export default function Landing() {
           <Sparkles size={16} /> Discover with AI
         </button>
       </div>
-      {/* Search and Filter Row */}
+      {/* Search and Sort Row */}
       <div className="flex flex-col md:flex-row gap-4 mb-12">
-         {/* Search Bar */}
-         <div className="flex-1 relative group z-30">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#749962] transition-colors" size={18} />
-            <input 
-              type="text" 
-              placeholder="Search destinations, trips, or travel companions..." 
-              className="w-full bg-white border border-gray-200 rounded-full py-3.5 pl-12 pr-6 text-sm text-gray-800 outline-none focus:border-[#749962] focus:ring-2 focus:ring-[#749962]/20 transition-all shadow-sm" 
+         <div className="flex-1 relative z-30">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => handleSearch(e.target.value)}
+              placeholder="Search your trips by name or destination..."
+              aria-label="Search your trips"
+              className="w-full bg-white border border-gray-200 rounded-full py-3.5 pl-12 pr-6 text-sm text-gray-800 outline-none focus:border-[#749962] focus:ring-2 focus:ring-[#749962]/20 transition-all shadow-sm"
             />
-            {/* Search Dropdown / Filters */}
-            <div className="absolute top-[calc(100%+8px)] left-0 w-full bg-white border border-gray-100 rounded-2xl shadow-xl opacity-0 invisible group-focus-within:opacity-100 group-focus-within:visible transition-all duration-200 overflow-hidden">
-               <div className="p-4 border-b border-gray-50 flex items-center justify-between">
-                 <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Suggested Filters</span>
-                 <span className="text-xs font-bold text-[#749962] cursor-pointer hover:underline">Clear all</span>
-               </div>
-               <div className="p-2 flex flex-col">
-                  <div className="px-4 py-3 hover:bg-gray-50 cursor-pointer rounded-xl flex items-center justify-between group/item transition-colors">
-                     <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-green-50 text-green-600 flex items-center justify-center">
-                           <MapPin size={14} />
-                        </div>
-                        <div>
-                           <p className="text-sm font-bold text-gray-800 group-hover/item:text-[#749962] transition-colors">Tropical Destinations</p>
-                           <p className="text-xs text-gray-400 mt-0.5">Bali, Maldives, Hawaii</p>
-                        </div>
-                     </div>
-                     <span className="text-xs font-bold text-gray-300 group-hover/item:text-[#749962] transition-colors">Apply</span>
-                  </div>
-
-                  <div className="px-4 py-3 hover:bg-gray-50 cursor-pointer rounded-xl flex items-center justify-between group/item transition-colors">
-                     <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
-                           <Calendar size={14} />
-                        </div>
-                        <div>
-                           <p className="text-sm font-bold text-gray-800 group-hover/item:text-[#749962] transition-colors">Upcoming This Month</p>
-                           <p className="text-xs text-gray-400 mt-0.5">2 Trips scheduled in May</p>
-                        </div>
-                     </div>
-                     <span className="text-xs font-bold text-gray-300 group-hover/item:text-[#749962] transition-colors">Apply</span>
-                  </div>
-
-                  <div className="px-4 py-3 hover:bg-gray-50 cursor-pointer rounded-xl flex items-center justify-between group/item transition-colors">
-                     <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center">
-                           <User size={14} />
-                        </div>
-                        <div>
-                           <p className="text-sm font-bold text-gray-800 group-hover/item:text-[#749962] transition-colors">Travel Companions</p>
-                           <p className="text-xs text-gray-400 mt-0.5">Find people travelling to your destinations</p>
-                        </div>
-                     </div>
-                     <span className="text-xs font-bold text-gray-300 group-hover/item:text-[#749962] transition-colors">Apply</span>
-                  </div>
-               </div>
-               <div 
-                 onMouseDown={(e) => { e.preventDefault(); setIsAdvancedSearchOpen(true); }}
-                 className="bg-gray-50 p-4 text-center border-t border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors"
-               >
-                  <span className="text-sm font-bold text-[#749962]">Advanced Search & Filters &rarr;</span>
-               </div>
-            </div>
+            {searchQuery.trim() && (
+              <div className="absolute top-[calc(100%+8px)] left-0 w-full bg-white border border-gray-100 rounded-2xl shadow-xl overflow-hidden p-2">
+                {searchResults.length === 0 ? (
+                  <p className="px-4 py-3 text-sm text-gray-500">No trips match “{searchQuery}”.</p>
+                ) : searchResults.map((trip) => (
+                  <button
+                    key={trip._id}
+                    onClick={() => { handleSearch(''); handleTripClick(trip._id); }}
+                    className="w-full text-left px-4 py-3 hover:bg-gray-50 rounded-xl flex items-center gap-3 transition-colors"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-[#edf6e7] text-[#608250] flex items-center justify-center shrink-0"><MapPin size={14} /></div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-gray-800 truncate">{trip.name}</p>
+                      <p className="text-xs text-gray-400 truncate">{trip.destination || 'No destination'}{trip.startDate ? ` · ${trip.startDate}` : ''}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
          </div>
-         {/* Filter Buttons */}
-         <div className="flex gap-3 overflow-x-auto pb-2 md:pb-0 hide-scrollbar shrink-0">
-            <button className="whitespace-nowrap px-6 py-3.5 bg-white border border-gray-200 rounded-full text-sm font-semibold text-gray-700 hover:border-[#749962] hover:text-[#749962] transition-all shadow-sm flex items-center gap-2">
-               <Layers size={16} /> Group by
-            </button>
-            <button className="whitespace-nowrap px-6 py-3.5 bg-white border border-gray-200 rounded-full text-sm font-semibold text-gray-700 hover:border-[#749962] hover:text-[#749962] transition-all shadow-sm flex items-center gap-2">
-               <SlidersHorizontal size={16} /> Filter
-            </button>
-            <button className="whitespace-nowrap px-6 py-3.5 bg-white border border-gray-200 rounded-full text-sm font-semibold text-gray-700 hover:border-[#749962] hover:text-[#749962] transition-all shadow-sm flex items-center gap-2">
-               <ArrowUpDown size={16} /> Sort by...
-            </button>
-         </div>
+         <label className="shrink-0 flex items-center gap-2 px-5 py-2 bg-white border border-gray-200 rounded-full text-sm font-semibold text-gray-700 shadow-sm">
+            <ArrowUpDown size={16} className="text-[#608250]" />
+            <span className="sr-only">Sort trips</span>
+            <select value={tripSort} onChange={(e) => setTripSort(e.target.value)} className="bg-transparent outline-none py-1.5 cursor-pointer">
+              <option value="soonest">Soonest first</option>
+              <option value="recent">Recently added</option>
+              <option value="name">Name (A–Z)</option>
+            </select>
+         </label>
       </div>
 
       <div className="flex justify-between items-center mb-8">
@@ -477,10 +469,14 @@ export default function Landing() {
         {trips.length === 0 && (
           <div className="col-span-full text-center py-16 text-gray-500">
             <p className="text-lg font-bold mb-2">No upcoming trips yet</p>
-            <p className="text-sm">Click the + button to create your first trip!</p>
+            <p className="text-sm mb-5">Create one yourself, or let us suggest a place for your dates.</p>
+            <div className="flex flex-wrap justify-center gap-3">
+              <button onClick={() => openCreateTab()} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#152010] text-white font-semibold hover:bg-[#749962] transition-colors"><Plus size={16} /> New trip</button>
+              <button onClick={() => navigate('/create-trip')} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-[#152010] text-[#152010] font-semibold hover:bg-white transition-colors"><Sparkles size={16} /> Discover with AI</button>
+            </div>
           </div>
         )}
-        {trips.map(trip => (
+        {sortedTrips.map(trip => (
           <div 
             key={trip._id} 
             onClick={() => handleTripClick(trip._id)}
@@ -541,6 +537,8 @@ export default function Landing() {
           {suggestedTrips.map(trip => (
             <div 
               key={trip.id}
+              onClick={() => openCreateTab({ name: trip.name, destination: trip.name })}
+              title={`Plan a trip: ${trip.name}`}
               className="w-[100vw] min-w-[100vw] h-[400px] md:h-[500px] lg:h-[600px] relative overflow-hidden group cursor-pointer snap-center shrink-0"
             >
               <img src={trip.image} alt={trip.name} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
@@ -633,7 +631,7 @@ export default function Landing() {
       </div>
 
       <button
-        onClick={() => { setCurrentView('trip'); setTripTab('itinerary'); }}
+        onClick={() => openCreateTab()}
         className="fixed bottom-8 right-8 z-50 w-14 h-14 rounded-full bg-[#152010] text-[#c6e3b6] flex items-center justify-center hover:scale-110 active:scale-95 transition-all shadow-2xl shadow-[#152010]/30"
         aria-label="Create New Trip"
         title="Create New Trip"
@@ -643,108 +641,131 @@ export default function Landing() {
     </div>
   );
 
-  const renderItinerary = () => (
-    <div className="flex h-[calc(100vh-80px)] overflow-hidden">
-      {/* Left Panel */}
-      <div className="w-full md:w-1/3 md:min-w-[400px] border-r border-[#d6e7cc] overflow-y-auto p-6 bg-[#f3f8ef]">
-        <h2 className="text-2xl font-bold text-[#152010] mb-6">Itinerary Builder</h2>
-        
-        {/* Search */}
-        <div className="relative mb-8">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#608250]" size={16} />
-          <input 
-            type="text" 
-            placeholder="Search destinations, hotels, activities..." 
-            className="w-full bg-white border border-[#d6e7cc] rounded-lg py-3 pl-10 pr-4 text-sm text-[#152010] placeholder-gray-400 outline-none focus:border-[#749962] transition shadow-sm"
-          />
+  const STOP_TYPES = [
+    ['activity', 'Activity'],
+    ['food', 'Food'],
+    ['accommodation', 'Stay'],
+    ['transport', 'Transport'],
+    ['flight', 'Flight'],
+  ];
+
+  const renderItinerary = () => {
+    const days = selectedTrip.days || [];
+    const stopCount = days.reduce((n, d) => n + d.stops.length, 0);
+    return (
+    <div className="max-w-6xl mx-auto px-6 py-10 grid lg:grid-cols-3 gap-6">
+      <div className="lg:col-span-2 space-y-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-2xl font-black text-[#152010]">Itinerary Builder</h2>
+            <p className="text-sm text-gray-500">Plan each day: add the places, meals, stays and transport in order.</p>
+          </div>
+          <button onClick={handleAddDay} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#152010] text-white font-semibold hover:bg-[#749962] transition-colors">
+            <Plus size={16} /> Add day
+          </button>
         </div>
 
-        {/* Days Accordion */}
-        {[1, 2, 3].map(day => (
-          <div key={day} className="mb-4 bg-white border border-[#d6e7cc] rounded-xl overflow-hidden shadow-sm">
-             <div className="flex justify-between items-center p-4 cursor-pointer hover:bg-[#edf6e7] transition-colors">
-               <h3 className="text-[#152010] font-bold text-sm">Day {day} <span className="text-gray-500 font-medium ml-2">Jan 0{day+4}, 2024</span></h3>
-               <ChevronDown size={16} className="text-[#608250]" />
-             </div>
-             {day === 1 && (
-              <div className="p-4 border-t border-[#d6e7cc] bg-[#f8fcf5]">
-                <div className="relative pl-6 border-l-2 border-[#d6e7cc] space-y-5 py-2">
-                   {/* Stop 1 */}
-                   <div className="relative">
-                    <div className="absolute -left-[31px] top-1.5 w-3 h-3 bg-[#749962] rounded-full border-[3px] border-[#f8fcf5]"></div>
-                    <div className="bg-white p-4 rounded-lg border border-[#d6e7cc] hover:border-[#749962] transition">
-                      <h4 className="text-[#152010] text-sm font-bold">Arrive at Zurich Airport</h4>
-                       <p className="text-[#749962] text-xs font-bold mt-1.5">10:00 AM <span className="text-gray-500 font-normal ml-1">• Flight LX 38</span></p>
-                     </div>
-                   </div>
-                   {/* Stop 2 */}
-                   <div className="relative">
-                    <div className="absolute -left-[31px] top-1.5 w-3 h-3 bg-gray-500 rounded-full border-[3px] border-[#f8fcf5]"></div>
-                    <div className="bg-white p-4 rounded-lg border border-[#d6e7cc] hover:border-[#749962] transition">
-                      <h4 className="text-[#152010] text-sm font-bold">Check-in at Hotel Alpine</h4>
-                       <p className="text-[#749962] text-xs font-bold mt-1.5">1:00 PM <span className="text-gray-500 font-normal ml-1">• Accommodation</span></p>
-                     </div>
-                   </div>
-                 </div>
-                <button className="mt-6 w-full border border-dashed border-[#b7ceb0] text-[#608250] hover:text-[#749962] hover:border-[#749962] hover:bg-[#749962]/5 py-3 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2">
-                   <Plus size={16} /> Add Stop
-                 </button>
-               </div>
-             )}
+        {days.length === 0 && (
+          <div className="border-2 border-dashed border-[#c9dcbd] rounded-2xl p-10 text-center bg-white/50">
+            <p className="font-bold text-[#152010]">No days yet</p>
+            <p className="text-sm text-gray-500 mt-1">Click “Add day” to start planning. Days are dated from your trip’s start date.</p>
           </div>
-        ))}
+        )}
+
+        {days.map((day) => {
+          const draft = draftFor(day._id);
+          return (
+            <div key={day._id} className="bg-white border border-[#d6e7cc] rounded-2xl shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-4 bg-[#f8fcf5] border-b border-[#d6e7cc]">
+                <h3 className="text-[#152010] font-bold">
+                  Day {day.dayNumber}
+                  {day.date && <span className="text-gray-500 font-medium ml-2 text-sm">{new Date(`${day.date}T00:00:00`).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}</span>}
+                </h3>
+                <button onClick={() => handleDeleteDay(day._id)} className="text-xs font-semibold text-red-400 hover:text-red-600">Remove day</button>
+              </div>
+
+              <div className="p-5">
+                {day.stops.length > 0 ? (
+                  <ol className="relative pl-6 border-l-2 border-[#d6e7cc] space-y-3 mb-5">
+                    {day.stops.map((stop) => (
+                      <li key={stop._id} className="relative">
+                        <span className="absolute -left-[31px] top-3 w-3 h-3 bg-[#749962] rounded-full border-[3px] border-white" />
+                        <div className="bg-[#f8fcf5] p-3.5 rounded-xl border border-[#d6e7cc] flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-[#152010] text-sm font-bold truncate">{stop.title}</p>
+                            <p className="text-xs text-[#608250] font-semibold mt-0.5">
+                              {stop.time || 'Any time'} · {(STOP_TYPES.find(([k]) => k === stop.type) || [null, stop.type])[1]}
+                            </p>
+                          </div>
+                          <button onClick={() => handleDeleteStop(day._id, stop._id)} className="text-xs text-red-400 hover:text-red-600 shrink-0">Remove</button>
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p className="text-sm text-gray-400 mb-4">No stops yet for this day.</p>
+                )}
+
+                <form
+                  onSubmit={(e) => { e.preventDefault(); handleAddStop(day._id); }}
+                  className="flex flex-wrap gap-2"
+                >
+                  <input
+                    value={draft.title}
+                    onChange={(e) => updateDraft(day._id, { title: e.target.value })}
+                    placeholder="Add a stop, e.g. Sunset at Baga Beach"
+                    aria-label={`New stop for day ${day.dayNumber}`}
+                    className="flex-1 min-w-[180px] bg-white border border-[#d6e7cc] rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#749962]"
+                  />
+                  <input
+                    type="time"
+                    value={draft.time}
+                    onChange={(e) => updateDraft(day._id, { time: e.target.value })}
+                    aria-label="Time"
+                    className="bg-white border border-[#d6e7cc] rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#749962]"
+                  />
+                  <select
+                    value={draft.type}
+                    onChange={(e) => updateDraft(day._id, { type: e.target.value })}
+                    aria-label="Stop type"
+                    className="bg-white border border-[#d6e7cc] rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#749962]"
+                  >
+                    {STOP_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                  <button type="submit" disabled={!draft.title.trim()} className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg bg-[#749962] text-white text-sm font-bold hover:bg-[#608250] disabled:opacity-40 transition-colors">
+                    <Plus size={15} /> Add
+                  </button>
+                </form>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
-      {/* Right Panel: Map & Timeline */}
-      <div className="flex-1 bg-[#eaf4e4] hidden md:flex flex-col relative overflow-hidden">
-         <div className="flex-1 w-full relative flex items-center justify-center">
-            {/* Map Grid Pattern */}
-            <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
-            
-            <div className="text-[#608250] flex flex-col items-center gap-3">
-               <MapIcon size={48} strokeWidth={1} />
-               <p className="font-bold text-sm tracking-widest uppercase">Interactive Route Map</p>
-            </div>
-            
-            {/* Custom Map Markers (Simulated) */}
-            <div className="absolute top-[40%] left-[45%] flex flex-col items-center z-10 group cursor-pointer">
-               <div className="w-8 h-8 bg-[#749962] text-white rounded-full flex items-center justify-center font-bold text-xs shadow-[0_0_15px_rgba(116,153,98,0.5)] group-hover:scale-110 transition-transform">1</div>
-               <div className="w-0.5 h-6 bg-[#749962]"></div>
-               <div className="w-2 h-2 bg-white rounded-full shadow-md"></div>
-               {/* Line connecting to marker 2 */}
-               <svg className="absolute top-4 left-4 w-32 h-24 pointer-events-none -z-10 overflow-visible">
-                 <path d="M 0 0 Q 50 20 80 80" fill="none" stroke="#749962" strokeWidth="2" strokeDasharray="4 4" />
-               </svg>
-            </div>
-            <div className="absolute top-[55%] left-[53%] flex flex-col items-center z-10 group cursor-pointer">
-               <div className="w-8 h-8 bg-white text-[#152010] border-2 border-[#749962] rounded-full flex items-center justify-center font-bold text-xs shadow-lg group-hover:bg-[#749962] group-hover:text-white transition-colors">2</div>
-            </div>
-         </div>
-         
-         {/* Horizontal Timeline Block */}
-         <div className="h-[140px] bg-[#f3f8ef] border-t border-[#d6e7cc] p-5 overflow-x-auto whitespace-nowrap">
-            <h4 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-4">Day 1 Timeline</h4>
-            <div className="flex items-center gap-4 relative">
-               <div className="absolute left-0 right-0 top-1/2 h-px bg-[#d6e7cc] -z-10"></div>
-               
-               <div className="bg-white border border-[#749962] px-5 py-3 rounded-lg text-sm font-bold text-[#749962] shadow-sm flex items-center gap-3">
-                 <div className="w-2 h-2 rounded-full bg-[#749962]"></div>
-                 10:00 AM - Arrival
-               </div>
-               
-               <div className="bg-white border border-[#d6e7cc] px-5 py-3 rounded-lg text-sm text-gray-700 font-medium hover:border-[#749962] transition cursor-pointer flex items-center gap-3">
-                 <div className="w-2 h-2 rounded-full bg-gray-600"></div>
-                 1:00 PM - Hotel
-               </div>
-               
-               <button className="w-10 h-10 rounded-full bg-white border border-[#d6e7cc] flex items-center justify-center text-[#608250] hover:text-[#749962] hover:border-[#749962] transition shadow-sm">
-                 <Plus size={16}/>
-               </button>
-            </div>
-         </div>
-      </div>
+      <aside className="space-y-4 lg:sticky lg:top-[150px] self-start">
+        <div className="bg-[#152010] text-white rounded-2xl p-6 shadow-lg">
+          <p className="text-[#a3ff00] text-xs font-bold uppercase tracking-widest">Trip at a glance</p>
+          <h3 className="text-xl font-black mt-2">{selectedTrip.name}</h3>
+          {selectedTrip.destination && <p className="text-white/70 text-sm flex items-center gap-1.5 mt-1"><MapPin size={14} /> {selectedTrip.destination}</p>}
+          <div className="grid grid-cols-3 gap-3 mt-5 text-center">
+            <div><p className="text-2xl font-black">{days.length}</p><p className="text-xs text-white/60">Days</p></div>
+            <div><p className="text-2xl font-black">{stopCount}</p><p className="text-xs text-white/60">Stops</p></div>
+            <div><p className="text-2xl font-black">{(selectedTrip.packingList || []).length}</p><p className="text-xs text-white/60">To pack</p></div>
+          </div>
+          <p className="mt-5 text-sm text-white/70">Budget planned</p>
+          <p className="text-2xl font-black text-[#a3ff00]">{formatINR(getTotalBudget())}</p>
+        </div>
+        <div className="bg-white border border-[#d6e7cc] rounded-2xl p-4 grid grid-cols-2 gap-2 text-sm font-semibold">
+          {[['budget', 'Budget', BarChart3], ['packing', 'Packing', ClipboardCheck], ['notes', 'Notes', NotebookPen], ['share', 'Share', Share2]].map(([key, label, Icon]) => (
+            <button key={key} onClick={() => setTripTab(key)} className="flex items-center gap-2 px-3 py-2.5 rounded-xl hover:bg-[#edf6e7] text-[#152010] transition-colors">
+              <Icon size={15} className="text-[#608250]" /> {label}
+            </button>
+          ))}
+        </div>
+      </aside>
     </div>
-  );
+    );
+  };
 
   const renderBudget = () => {
     const total = getTotalBudget();
@@ -758,7 +779,7 @@ export default function Landing() {
        <div className="bg-[#1a1a1a] border border-gray-800 rounded-2xl p-10 mb-10 text-center relative overflow-hidden shadow-lg">
           <div className="absolute top-0 left-0 w-2 h-full bg-[#749962]"></div>
           <h2 className="text-gray-400 text-xs uppercase tracking-widest font-bold mb-3">Total Estimated Cost</h2>
-          <div className="text-5xl md:text-7xl font-black text-white tracking-tighter">${total.toLocaleString()}<span className="text-3xl text-gray-600 font-medium">.00</span></div>
+          <div className="text-5xl md:text-7xl font-black text-white tracking-tighter">{formatINR(total)}</div>
        </div>
        <div className="bg-[#1a1a1a] border border-gray-800 rounded-2xl p-6 mb-6">
           <h3 className="text-white font-bold text-sm uppercase tracking-wide mb-4">Add Expense</h3>
@@ -769,46 +790,46 @@ export default function Landing() {
                <option value="activities">Activities</option>
              </select>
              <input value={newBudget.name} onChange={(e) => setNewBudget({...newBudget, name: e.target.value})} placeholder="Item name" className="flex-1 min-w-[150px] bg-[#111] border border-gray-700 text-white rounded-lg px-4 py-3 outline-none placeholder-gray-500" />
-             <input value={newBudget.amount} onChange={(e) => setNewBudget({...newBudget, amount: e.target.value})} type="number" placeholder="Amount ($)" className="w-32 bg-[#111] border border-gray-700 text-white rounded-lg px-4 py-3 outline-none placeholder-gray-500" />
+             <input value={newBudget.amount} onChange={(e) => setNewBudget({...newBudget, amount: e.target.value})} type="number" placeholder="Amount (₹)" className="w-32 bg-[#111] border border-gray-700 text-white rounded-lg px-4 py-3 outline-none placeholder-gray-500" />
              <button onClick={handleAddBudgetItem} className="bg-[#749962] text-white px-5 py-3 rounded-lg font-bold hover:bg-[#608250] transition">Add</button>
           </div>
        </div>
        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-[#1a1a1a] border border-gray-800 p-6 rounded-2xl hover:border-gray-700 transition">
-             <h3 className="text-white font-bold text-sm uppercase tracking-wide mb-6 flex items-center justify-between">Flights/Transport<DollarSign size={16} className="text-gray-500" /></h3>
-             <div className="text-4xl font-bold text-[#749962] mb-6">${transportTotal.toLocaleString()}</div>
+             <h3 className="text-white font-bold text-sm uppercase tracking-wide mb-6 flex items-center justify-between">Flights/Transport<Wallet size={16} className="text-gray-500" /></h3>
+             <div className="text-4xl font-bold text-[#749962] mb-6">{formatINR(transportTotal)}</div>
              <div className="w-full bg-[#111] h-2.5 rounded-full overflow-hidden mb-6"><div className="bg-[#749962] h-full rounded-full" style={{ width: `${(transportTotal / maxCat) * 100}%` }}></div></div>
              <div className="space-y-4">
                 {(selectedTrip?.budget?.transport || []).map(item => (
                   <div key={item._id} className="flex justify-between text-sm border-b border-gray-800 pb-3">
                      <span className="text-gray-400">{item.name}</span>
-                     <div className="flex items-center gap-2"><span className="text-white font-bold">${item.amount}</span><button onClick={() => handleDeleteBudgetItem('transport', item._id)} className="text-red-400 text-xs hover:text-red-500">×</button></div>
+                     <div className="flex items-center gap-2"><span className="text-white font-bold">{formatINR(item.amount)}</span><button onClick={() => handleDeleteBudgetItem('transport', item._id)} className="text-red-400 text-xs hover:text-red-500">×</button></div>
                   </div>
                 ))}
              </div>
           </div>
           <div className="bg-[#1a1a1a] border border-gray-800 p-6 rounded-2xl hover:border-gray-700 transition">
-             <h3 className="text-white font-bold text-sm uppercase tracking-wide mb-6 flex items-center justify-between">Accommodation<DollarSign size={16} className="text-gray-500" /></h3>
-             <div className="text-4xl font-bold text-[#a3ff00] mb-6">${accommodationTotal.toLocaleString()}</div>
+             <h3 className="text-white font-bold text-sm uppercase tracking-wide mb-6 flex items-center justify-between">Accommodation<Wallet size={16} className="text-gray-500" /></h3>
+             <div className="text-4xl font-bold text-[#a3ff00] mb-6">{formatINR(accommodationTotal)}</div>
              <div className="w-full bg-[#111] h-2.5 rounded-full overflow-hidden mb-6"><div className="bg-[#a3ff00] h-full rounded-full shadow-[0_0_10px_rgba(163,255,0,0.3)]" style={{ width: `${(accommodationTotal / maxCat) * 100}%` }}></div></div>
              <div className="space-y-4">
                 {(selectedTrip?.budget?.accommodation || []).map(item => (
                   <div key={item._id} className="flex justify-between text-sm border-b border-gray-800 pb-3">
                      <span className="text-gray-400">{item.name}</span>
-                     <div className="flex items-center gap-2"><span className="text-white font-bold">${item.amount}</span><button onClick={() => handleDeleteBudgetItem('accommodation', item._id)} className="text-red-400 text-xs hover:text-red-500">×</button></div>
+                     <div className="flex items-center gap-2"><span className="text-white font-bold">{formatINR(item.amount)}</span><button onClick={() => handleDeleteBudgetItem('accommodation', item._id)} className="text-red-400 text-xs hover:text-red-500">×</button></div>
                   </div>
                 ))}
              </div>
           </div>
           <div className="bg-[#1a1a1a] border border-gray-800 p-6 rounded-2xl hover:border-gray-700 transition">
-             <h3 className="text-white font-bold text-sm uppercase tracking-wide mb-6 flex items-center justify-between">Activities & Meals<DollarSign size={16} className="text-gray-500" /></h3>
-             <div className="text-4xl font-bold text-[#e6b333] mb-6">${activitiesTotal.toLocaleString()}</div>
+             <h3 className="text-white font-bold text-sm uppercase tracking-wide mb-6 flex items-center justify-between">Activities & Meals<Wallet size={16} className="text-gray-500" /></h3>
+             <div className="text-4xl font-bold text-[#e6b333] mb-6">{formatINR(activitiesTotal)}</div>
              <div className="w-full bg-[#111] h-2.5 rounded-full overflow-hidden mb-6"><div className="bg-[#e6b333] h-full rounded-full" style={{ width: `${(activitiesTotal / maxCat) * 100}%` }}></div></div>
              <div className="space-y-4">
                 {(selectedTrip?.budget?.activities || []).map(item => (
                   <div key={item._id} className="flex justify-between text-sm border-b border-gray-800 pb-3">
                      <span className="text-gray-400">{item.name}</span>
-                     <div className="flex items-center gap-2"><span className="text-white font-bold">${item.amount}</span><button onClick={() => handleDeleteBudgetItem('activities', item._id)} className="text-red-400 text-xs hover:text-red-500">×</button></div>
+                     <div className="flex items-center gap-2"><span className="text-white font-bold">{formatINR(item.amount)}</span><button onClick={() => handleDeleteBudgetItem('activities', item._id)} className="text-red-400 text-xs hover:text-red-500">×</button></div>
                   </div>
                 ))}
              </div>
@@ -818,36 +839,48 @@ export default function Landing() {
     );
   };
 
-  const renderShare = () => (
-    <div className="max-w-xl mx-auto px-6 py-24 text-center">
-       <div className="bg-[#1a1a1a] border border-gray-800 p-12 rounded-3xl flex flex-col items-center shadow-xl">
+  const renderShare = () => {
+    const shareText = `Check out my trip plan "${selectedTrip.name}" on Travelloop: ${shareUrl}`;
+    return (
+    <div className="max-w-xl mx-auto px-6 py-16 text-center">
+       <div className="bg-[#1a1a1a] border border-gray-800 p-10 rounded-3xl flex flex-col items-center shadow-xl">
           <div className="w-20 h-20 bg-[#111] border border-gray-800 rounded-full flex items-center justify-center mb-8 relative">
              <div className="absolute inset-0 bg-[#749962] rounded-full opacity-10 animate-pulse"></div>
              <Share2 size={32} className="text-[#749962]" />
           </div>
           <h2 className="text-3xl font-black text-white mb-3">Share the Journey</h2>
-          <p className="text-gray-400 text-sm mb-10 leading-relaxed">Generate a unique link to share your itinerary and budget with friends, family, or travel companions. They will have read-only access.</p>
-          
+          <p className="text-gray-400 text-sm mb-10 leading-relaxed">Create a link to “{selectedTrip.name}” that friends and family can open without an account. They get read-only access to the itinerary, budget total and packing list.</p>
+
           {!shareUrl ? (
             <button onClick={handleGenerateShareLink} className="w-full bg-[#749962] hover:bg-[#608250] text-white py-4 rounded-xl font-bold transition flex items-center justify-center gap-2 text-sm">
                <Share2 size={18} /> Generate Share Link
             </button>
           ) : (
             <>
-              <div className="w-full bg-[#111] border border-gray-700 rounded-xl p-2.5 flex items-center gap-3 mb-8">
-                 <input type="text" readOnly value={shareUrl} className="flex-1 bg-transparent text-gray-300 text-sm outline-none px-3 font-mono" />
-                 <button onClick={handleCopyShareLink} className="bg-[#749962] hover:bg-[#608250] text-white px-5 py-2.5 rounded-lg text-sm font-bold transition flex items-center gap-2 shadow-sm">
+              <div className="w-full bg-[#111] border border-gray-700 rounded-xl p-2.5 flex items-center gap-3 mb-3">
+                 <input type="text" readOnly value={shareUrl} onFocus={(e) => e.target.select()} aria-label="Share link" className="flex-1 min-w-0 bg-transparent text-gray-300 text-sm outline-none px-3 font-mono" />
+                 <button onClick={handleCopyShareLink} className="bg-[#749962] hover:bg-[#608250] text-white px-5 py-2.5 rounded-lg text-sm font-bold transition flex items-center gap-2 shadow-sm shrink-0">
                     <Copy size={16} /> Copy
                  </button>
               </div>
-              <button className="w-full border-2 border-[#749962] text-[#749962] hover:bg-[#749962] hover:text-white transition-colors py-4 rounded-xl font-bold flex items-center justify-center gap-2 text-sm">
-                 <Send size={18} /> Share to WhatsApp / Email
-              </button>
+              <p className="text-xs text-[#a3ff00] h-4 mb-6" role="status">{shareStatus}</p>
+              <div className="w-full grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <a href={`https://wa.me/?text=${encodeURIComponent(shareText)}`} target="_blank" rel="noreferrer" className="border-2 border-[#749962] text-[#749962] hover:bg-[#749962] hover:text-white transition-colors py-3 rounded-xl font-bold flex items-center justify-center gap-2 text-sm">
+                   <Send size={16} /> WhatsApp
+                </a>
+                <a href={`mailto:?subject=${encodeURIComponent(`Trip plan: ${selectedTrip.name}`)}&body=${encodeURIComponent(shareText)}`} className="border-2 border-[#749962] text-[#749962] hover:bg-[#749962] hover:text-white transition-colors py-3 rounded-xl font-bold flex items-center justify-center gap-2 text-sm">
+                   <Mail size={16} /> Email
+                </a>
+                <a href={shareUrl} target="_blank" rel="noreferrer" className="border-2 border-gray-700 text-gray-300 hover:bg-gray-800 transition-colors py-3 rounded-xl font-bold flex items-center justify-center gap-2 text-sm">
+                   <Globe2 size={16} /> Open
+                </a>
+              </div>
             </>
           )}
        </div>
     </div>
-  );
+    );
+  };
 
   const renderCreateTrip = () => (
     <div className="max-w-4xl mx-auto px-6 py-12">
@@ -916,45 +949,50 @@ export default function Landing() {
     </div>
   );
 
-  const renderCitySearch = () => (
+  const renderCitySearch = () => {
+    const q = placeQuery.trim().toLowerCase();
+    const matches = destinations.filter((d) =>
+      !q || d.name.toLowerCase().includes(q) || d.state.toLowerCase().includes(q) || d.types.some((t) => t.includes(q))
+    );
+    return (
     <div className="max-w-6xl mx-auto px-6 py-12">
-      <h2 className="text-2xl font-black text-[#152010] mb-6">City Search</h2>
-      <div className="bg-white border border-[#d6e7cc] rounded-2xl p-5 mb-5">
-        <input className="w-full bg-[#f8fcf5] border border-[#d6e7cc] rounded-xl px-4 py-3 outline-none focus:border-[#749962]" placeholder="Search city, country, region..." />
+      <div className="flex flex-wrap items-end justify-between gap-3 mb-6">
+        <div>
+          <h2 className="text-2xl font-black text-[#152010]">Explore places</h2>
+          <p className="text-sm text-gray-500">Popular spots and quieter alternatives across India.</p>
+        </div>
+        <button onClick={() => navigate('/create-trip')} className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#152010] text-[#a3ff00] text-sm font-bold hover:bg-[#22331a] transition-colors">
+          <Sparkles size={14} /> Which is best for my dates?
+        </button>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {['Bali, Indonesia', 'Kyoto, Japan', 'Santorini, Greece', 'Cusco, Peru'].map((city) => (
-          <div key={city} className="bg-white border border-[#d6e7cc] rounded-xl p-4 flex items-center justify-between">
-            <div>
-              <p className="font-bold text-[#152010]">{city}</p>
-              <p className="text-xs text-[#608250]">Cost index: Moderate</p>
+      <div className="bg-white border border-[#d6e7cc] rounded-2xl p-4 mb-5">
+        <input value={placeQuery} onChange={(e) => setPlaceQuery(e.target.value)} aria-label="Search places" className="w-full bg-[#f8fcf5] border border-[#d6e7cc] rounded-xl px-4 py-3 outline-none focus:border-[#749962]" placeholder="Search by place, state or vibe (beach, mountains, heritage...)" />
+      </div>
+      {destinations.length === 0 ? (
+        <p className="text-gray-500 text-center py-10">Loading places…</p>
+      ) : matches.length === 0 ? (
+        <p className="text-gray-500 text-center py-10">No places match “{placeQuery}”.</p>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {matches.map((place) => (
+            <div key={place.name} className="bg-white border border-[#d6e7cc] rounded-xl p-4 flex flex-col justify-between gap-3 hover:border-[#749962] hover:-translate-y-0.5 transition-all">
+              <div>
+                <p className="font-bold text-[#152010]">{place.name}</p>
+                <p className="text-xs text-[#608250]">{place.state}</p>
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {place.types.slice(0, 3).map((t) => <span key={t} className="text-[11px] px-2 py-0.5 rounded-full bg-[#edf6e7] text-[#3A512F] capitalize">{t}</span>)}
+                </div>
+              </div>
+              <button onClick={() => openCreateTab({ name: `Trip to ${place.name}`, destination: `${place.name}, ${place.state}` })} className="self-start px-4 py-2 rounded-lg bg-[#749962] text-white text-sm font-semibold hover:bg-[#608250] transition-colors">
+                Plan a trip here
+              </button>
             </div>
-            <button className="px-4 py-2 rounded-lg bg-[#749962] text-white text-sm font-semibold">Add to Trip</button>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
-  );
-
-  const renderActivitySearch = () => (
-    <div className="max-w-6xl mx-auto px-6 py-12">
-      <h2 className="text-2xl font-black text-[#152010] mb-6">Activity Search</h2>
-      <div className="flex flex-wrap gap-2 mb-5">
-        {['Sightseeing', 'Adventure', 'Food', 'Culture', 'Budget Friendly'].map((f) => (
-          <button key={f} className="px-4 py-2 rounded-full bg-white border border-[#d6e7cc] text-[#152010] text-sm font-semibold">{f}</button>
-        ))}
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {['Temple Tour', 'Mountain Hike', 'Street Food Walk'].map((item) => (
-          <div key={item} className="bg-white border border-[#d6e7cc] rounded-xl p-4">
-            <p className="font-bold text-[#152010]">{item}</p>
-            <p className="text-sm text-gray-600 mt-2">Duration: 2-4 hours • Cost: $$</p>
-            <button className="mt-4 px-4 py-2 rounded-lg bg-[#749962] text-white text-sm font-semibold">Add Activity</button>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+    );
+  };
 
   const renderPackingChecklist = () => (
     <div className="max-w-4xl mx-auto px-6 py-12">
@@ -1003,40 +1041,72 @@ export default function Landing() {
   );
 
   const renderUserSettings = () => (
-    <div className="max-w-4xl mx-auto px-6 py-12">
-      <h2 className="text-2xl font-black text-[#152010] mb-6">User Settings</h2>
-      <div className="bg-white border border-[#d6e7cc] rounded-2xl p-6 grid grid-cols-1 md:grid-cols-2 gap-5">
-        <div>
-          <label className="text-xs font-bold text-[#608250] uppercase tracking-wider mb-1 block">Name</label>
-          <input value={settingsForm.name} onChange={(e) => setSettingsForm({...settingsForm, name: e.target.value})} className="w-full bg-[#f8fcf5] border border-[#d6e7cc] rounded-xl px-4 py-3 outline-none focus:border-[#749962]" placeholder={user?.name || 'Your name'} />
+    <div className="max-w-4xl mx-auto px-6 py-12 space-y-6">
+      <h2 className="text-2xl font-black text-[#152010]">Account settings</h2>
+      {settingsStatus && (
+        <p role="status" className={`text-sm font-medium ${settingsStatus.type === 'error' ? 'text-red-600' : 'text-[#608250]'}`}>{settingsStatus.text}</p>
+      )}
+      <div className="bg-white border border-[#d6e7cc] rounded-2xl p-6">
+        <h3 className="font-bold text-[#152010] mb-4">Profile</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div>
+            <label htmlFor="settings-name" className="text-xs font-bold text-[#608250] uppercase tracking-wider mb-1 block">Name</label>
+            <input id="settings-name" value={settingsForm.name} onChange={(e) => setSettingsForm({...settingsForm, name: e.target.value})} className="w-full bg-[#f8fcf5] border border-[#d6e7cc] rounded-xl px-4 py-3 outline-none focus:border-[#749962]" placeholder={user?.name || 'Your name'} />
+          </div>
+          <div>
+            <label htmlFor="settings-email" className="text-xs font-bold text-[#608250] uppercase tracking-wider mb-1 block">Email</label>
+            <input id="settings-email" type="email" value={settingsForm.email} onChange={(e) => setSettingsForm({...settingsForm, email: e.target.value})} className="w-full bg-[#f8fcf5] border border-[#d6e7cc] rounded-xl px-4 py-3 outline-none focus:border-[#749962]" placeholder={user?.email || 'Your email'} />
+          </div>
         </div>
-        <div>
-          <label className="text-xs font-bold text-[#608250] uppercase tracking-wider mb-1 block">Email</label>
-          <input value={settingsForm.email} onChange={(e) => setSettingsForm({...settingsForm, email: e.target.value})} className="w-full bg-[#f8fcf5] border border-[#d6e7cc] rounded-xl px-4 py-3 outline-none focus:border-[#749962]" placeholder={user?.email || 'Your email'} />
+        <button onClick={handleUpdateProfile} className="mt-5 px-5 py-3 rounded-xl bg-[#749962] text-white font-bold hover:bg-[#608250] transition-colors">Save profile</button>
+      </div>
+      <div className="bg-white border border-[#d6e7cc] rounded-2xl p-6">
+        <h3 className="font-bold text-[#152010] mb-4">Change password</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div>
+            <label htmlFor="settings-current-pw" className="text-xs font-bold text-[#608250] uppercase tracking-wider mb-1 block">Current password</label>
+            <input id="settings-current-pw" type="password" autoComplete="current-password" value={passwordForm.currentPassword} onChange={(e) => setPasswordForm({...passwordForm, currentPassword: e.target.value})} className="w-full bg-[#f8fcf5] border border-[#d6e7cc] rounded-xl px-4 py-3 outline-none focus:border-[#749962]" />
+          </div>
+          <div>
+            <label htmlFor="settings-new-pw" className="text-xs font-bold text-[#608250] uppercase tracking-wider mb-1 block">New password</label>
+            <input id="settings-new-pw" type="password" autoComplete="new-password" value={passwordForm.newPassword} onChange={(e) => setPasswordForm({...passwordForm, newPassword: e.target.value})} className="w-full bg-[#f8fcf5] border border-[#d6e7cc] rounded-xl px-4 py-3 outline-none focus:border-[#749962]" placeholder="At least 6 characters" />
+          </div>
         </div>
-        <select className="bg-[#f8fcf5] border border-[#d6e7cc] rounded-xl px-4 py-3 outline-none focus:border-[#749962]">
-          <option>English</option>
-          <option>Hindi</option>
-        </select>
-        <button onClick={handleUpdateProfile} className="px-5 py-3 rounded-xl bg-[#749962] text-white font-bold hover:bg-[#608250] transition-colors">Save Changes</button>
+        <button onClick={handleChangePassword} className="mt-5 px-5 py-3 rounded-xl bg-[#152010] text-white font-bold hover:bg-[#749962] transition-colors">Update password</button>
       </div>
     </div>
   );
 
   const renderPublicItinerary = () => (
-    <div className="max-w-5xl mx-auto px-6 py-12">
-      <div className="bg-white border border-[#d6e7cc] rounded-2xl p-6">
-        <h2 className="text-2xl font-black text-[#152010] mb-3">Shared Itinerary</h2>
-        <p className="text-[#608250] mb-5">Public read-only view for friends and community.</p>
-        <div className="space-y-3 mb-5">
-          <p className="text-[#152010]">Day 1: Arrival and city orientation</p>
-          <p className="text-[#152010]">Day 2: Activities and local cuisine</p>
-          <p className="text-[#152010]">Day 3: Scenic spots and departure</p>
+    <div className="max-w-4xl mx-auto px-6 py-12">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-[#608250]">This is what people see when you share this trip.</p>
+        <button onClick={() => setTripTab('share')} className="text-sm font-semibold text-[#152010] underline">Get the share link</button>
+      </div>
+      <TripReadOnly trip={selectedTrip} />
+    </div>
+  );
+
+  // Trip-specific tabs need a selected trip; otherwise let the user pick or create one.
+  const renderPickTrip = () => (
+    <div className="max-w-3xl mx-auto px-6 py-16">
+      <div className="bg-white border border-[#d6e7cc] rounded-3xl p-8 text-center shadow-sm">
+        <h2 className="text-2xl font-black text-[#152010]">Pick a trip to work on</h2>
+        <p className="text-gray-500 mt-2">This tab works on one trip at a time.</p>
+        <div className="mt-6 grid gap-2 text-left">
+          {[...trips, ...previousTrips].map((trip) => (
+            <button key={trip._id} onClick={() => { const tab = tripTab; handleTripClick(trip._id).then(() => setTripTab(tab)); }} className="flex items-center justify-between px-4 py-3 rounded-xl border border-[#d6e7cc] hover:border-[#749962] hover:bg-[#f8fcf5] transition-colors">
+              <span className="font-semibold text-[#152010]">{trip.name}</span>
+              <span className="text-xs text-gray-500">{trip.destination}</span>
+            </button>
+          ))}
         </div>
-        <button className="px-5 py-3 rounded-xl bg-[#749962] text-white font-bold">Copy Trip</button>
+        <button onClick={() => openCreateTab()} className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#152010] text-white font-semibold hover:bg-[#749962] transition-colors"><Plus size={16} /> Create a new trip</button>
       </div>
     </div>
   );
+
+  const withTrip = (render) => (selectedTrip ? render() : renderPickTrip());
 
   // ─── Profile helpers ────────────────────────────────────
   const tripDays = (trip) => {
@@ -1378,14 +1448,18 @@ export default function Landing() {
       <main>
         {currentView === 'trip' && (
           <div className="sticky top-[80px] z-30 bg-[#E5F0E0]/95 backdrop-blur border-b border-[#d6e7cc]">
+            <div className="max-w-6xl mx-auto px-6 pt-3 flex items-center gap-3 text-sm">
+              <button onClick={() => { setCurrentView('dashboard'); window.scrollTo(0, 0); }} className="font-semibold text-[#608250] hover:text-[#152010]">&larr; Dashboard</button>
+              {selectedTrip && <span className="text-gray-400">/</span>}
+              {selectedTrip && <span className="font-bold text-[#152010] truncate">{selectedTrip.name}</span>}
+            </div>
             <div className="max-w-6xl mx-auto px-6 py-3 flex gap-2 overflow-x-auto hide-scrollbar">
               {[
                 { key: 'create', label: 'Create', icon: Plus },
                 { key: 'mytrips', label: 'My Trips', icon: Globe2 },
                 { key: 'itinerary', label: 'Builder', icon: MapIcon },
                 { key: 'itineraryview', label: 'Itinerary View', icon: Calendar },
-                { key: 'citysearch', label: 'City Search', icon: Search },
-                { key: 'activitysearch', label: 'Activities', icon: Activity },
+                { key: 'citysearch', label: 'Explore places', icon: Search },
                 { key: 'budget', label: 'Budget', icon: BarChart3 },
                 { key: 'packing', label: 'Packing', icon: ClipboardCheck },
                 { key: 'notes', label: 'Notes', icon: NotebookPen },
@@ -1417,33 +1491,7 @@ export default function Landing() {
               className="py-6 md:py-8 h-[52vh] md:h-[70vh] min-h-[340px] max-h-[760px] origin-top"
               style={{ opacity: heroOpacity, scale: heroScale, filter: heroBlur, pointerEvents: heroPointer }}
             >
-              <div className="flex gap-2.5 md:gap-4 h-full w-[116%] -ml-[8%]" style={{ transform: 'skewX(-12deg)' }}>
-                {HERO_COLUMNS.map((col, c) => (
-                  <div
-                    key={c}
-                    className={`${col.mobile ? 'flex' : 'hidden md:flex'} flex-col gap-2.5 md:gap-4 min-w-0`}
-                    style={{ flex: `${col.grow} 1 0` }}
-                  >
-                    <div aria-hidden="true" style={{ flex: `${col.padTop} 1 0` }} />
-                    {col.tiles.map((tile, t) => (
-                      <div
-                        key={t}
-                        className={`hero-tile relative overflow-hidden bg-[#d6e7cc] shadow-md cursor-pointer transition-all duration-500 ease-out hover:z-20 hover:scale-[1.08] hover:-translate-y-2 hover:shadow-2xl hover:shadow-[#152010]/30 group/tile ${tile.align}`}
-                        style={{ flex: `${tile.grow} 1 0`, width: `${tile.width}%`, minHeight: 0 }}
-                      >
-                        <img
-                          src={tile.src}
-                          alt={tile.alt}
-                          className="absolute top-0 h-full max-w-none -left-1/2 w-[200%] object-cover"
-                          style={{ transform: 'skewX(12deg)' }}
-                        />
-                        <div className="absolute inset-0 bg-[#152010]/0 group-hover/tile:bg-[#152010]/10 transition-colors duration-500" />
-                      </div>
-                    ))}
-                    <div aria-hidden="true" style={{ flex: `${col.padBottom} 1 0` }} />
-                  </div>
-                ))}
-              </div>
+              <HeroCollage />
             </motion.div>
           </div>
         )}
@@ -1452,112 +1500,18 @@ export default function Landing() {
         {currentView === 'profile' && renderProfileDashboard()}
         {currentView === 'trip' && tripTab === 'create' && renderCreateTrip()}
         {currentView === 'trip' && tripTab === 'mytrips' && renderMyTrips()}
-        {currentView === 'trip' && tripTab === 'itinerary' && renderItinerary()}
-        {currentView === 'trip' && tripTab === 'itineraryview' && renderItineraryView()}
+        {currentView === 'trip' && tripTab === 'itinerary' && withTrip(renderItinerary)}
+        {currentView === 'trip' && tripTab === 'itineraryview' && withTrip(renderItineraryView)}
         {currentView === 'trip' && tripTab === 'citysearch' && renderCitySearch()}
-        {currentView === 'trip' && tripTab === 'activitysearch' && renderActivitySearch()}
-        {currentView === 'trip' && tripTab === 'budget' && renderBudget()}
-        {currentView === 'trip' && tripTab === 'packing' && renderPackingChecklist()}
-        {currentView === 'trip' && tripTab === 'notes' && renderTripNotes()}
-        {currentView === 'trip' && tripTab === 'share' && renderShare()}
-        {currentView === 'trip' && tripTab === 'public' && renderPublicItinerary()}
+        {currentView === 'trip' && tripTab === 'budget' && withTrip(renderBudget)}
+        {currentView === 'trip' && tripTab === 'packing' && withTrip(renderPackingChecklist)}
+        {currentView === 'trip' && tripTab === 'notes' && withTrip(renderTripNotes)}
+        {currentView === 'trip' && tripTab === 'share' && withTrip(renderShare)}
+        {currentView === 'trip' && tripTab === 'public' && withTrip(renderPublicItinerary)}
         {currentView === 'trip' && tripTab === 'settings' && renderUserSettings()}
       </main>
 
       <SiteFooter />
-
-      {/* Advanced Search Modal */}
-      {isAdvancedSearchOpen && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6 md:p-12">
-          {/* Backdrop */}
-          <div 
-            className="absolute inset-0 bg-[#000000]/70 backdrop-blur-xl transition-opacity"
-            onClick={() => setIsAdvancedSearchOpen(false)}
-          ></div>
-          
-          {/* Modal Container */}
-          <div className="relative w-full max-w-4xl max-h-full bg-[#f3f8ef] rounded-3xl shadow-2xl overflow-hidden flex flex-col border border-[#d6e7cc] animate-in fade-in zoom-in-95 duration-200">
-             {/* Header */}
-             <div className="p-6 md:p-8 flex justify-between items-center border-b border-[#d6e7cc]">
-                <h2 className="text-3xl font-black text-[#152010] tracking-tight">Advanced Search</h2>
-                <button 
-                  onClick={() => setIsAdvancedSearchOpen(false)}
-                  className="w-10 h-10 rounded-full bg-white border border-[#d6e7cc] hover:bg-[#edf6e7] flex items-center justify-center text-[#152010] transition-colors"
-                >
-                  <X size={20} />
-                </button>
-             </div>
-             
-             {/* Body */}
-             <div className="p-6 md:p-8 overflow-y-auto flex-1 custom-scrollbar">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                   
-                   {/* Destination Input */}
-                   <div className="space-y-2 col-span-1 md:col-span-2">
-                    <label className="text-sm font-bold text-[#608250] uppercase tracking-wider">Destination</label>
-                     <div className="relative">
-                       <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-[#608250]" size={20} />
-                       <input type="text" placeholder="Where do you want to go?" className="w-full bg-white border border-[#d6e7cc] rounded-xl py-4 pl-12 pr-4 text-[#152010] placeholder-gray-400 focus:outline-none focus:border-[#749962] transition-colors" />
-                     </div>
-                   </div>
-
-                   {/* Date Range */}
-                   <div className="space-y-2">
-                    <label className="text-sm font-bold text-[#608250] uppercase tracking-wider">Dates</label>
-                     <div className="relative">
-                       <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-[#608250]" size={20} />
-                       <input type="text" placeholder="Select dates" className="w-full bg-white border border-[#d6e7cc] rounded-xl py-4 pl-12 pr-4 text-[#152010] placeholder-gray-400 focus:outline-none focus:border-[#749962] transition-colors" />
-                     </div>
-                   </div>
-
-                   {/* Budget Range (Dummy) */}
-                   <div className="space-y-2">
-                    <label className="text-sm font-bold text-[#608250] uppercase tracking-wider flex justify-between">
-                       <span>Budget (Per Person)</span>
-                      <span className="text-[#152010]">$500 - $2500+</span>
-                     </label>
-                     <div className="h-14 flex items-center px-2">
-                       <div className="w-full h-2 bg-[#d6e7cc] rounded-full relative">
-                          <div className="absolute left-[20%] right-[30%] h-full bg-[#749962] rounded-full"></div>
-                           <div className="absolute left-[20%] top-1/2 -translate-y-1/2 w-5 h-5 bg-white rounded-full shadow cursor-grab"></div>
-                           <div className="absolute right-[30%] top-1/2 -translate-y-1/2 w-5 h-5 bg-white rounded-full shadow cursor-grab"></div>
-                        </div>
-                     </div>
-                   </div>
-
-                   {/* Trip Style Badges */}
-                   <div className="space-y-3 col-span-1 md:col-span-2 mt-4">
-                    <label className="text-sm font-bold text-[#608250] uppercase tracking-wider">Trip Style</label>
-                     <div className="flex flex-wrap gap-3">
-                        {['Adventure', 'Relaxation', 'Cultural', 'Nature', 'City Break', 'Road Trip', 'Luxury'].map((style, i) => (
-                         <button key={style} className={`px-5 py-2.5 rounded-full text-sm font-bold border transition-colors ${i === 0 || i === 3 ? 'bg-[#749962] border-[#749962] text-white' : 'bg-white border-[#d6e7cc] text-[#152010] hover:border-[#749962]'}`}>
-                            {style}
-                          </button>
-                        ))}
-                     </div>
-                   </div>
-
-                </div>
-             </div>
-             
-             {/* Footer */}
-             <div className="p-6 border-t border-[#d6e7cc] flex justify-end gap-4 bg-white">
-                <button 
-                  onClick={() => setIsAdvancedSearchOpen(false)}
-                  className="px-6 py-3 rounded-xl font-bold text-gray-500 hover:text-[#152010] transition-colors"
-                >
-                  Cancel
-                </button>
-                <button 
-                  onClick={() => setIsAdvancedSearchOpen(false)}
-                  className="px-8 py-3 rounded-xl font-black bg-[#749962] text-white hover:bg-[#608250] hover:scale-105 active:scale-95 transition-all shadow-lg shadow-[#749962]/20 flex items-center gap-2"
-                >
-                  <Search size={18} /> Show Results
-                </button>
-             </div>
-          </div>
-        </div>
-      )}
 
     </div>
   );

@@ -2,9 +2,14 @@ const User = require("../models/User");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
+// Case-insensitive exact match (emails are stored lowercased, but older accounts may not be)
+const exactCI = (value) => new RegExp(`^${value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i");
+
 const registerUser = async (req, res) => {
     try {
-        const { name, email, password } = req.body;
+        const { password } = req.body;
+        const name = (req.body.name || "").trim();
+        const email = (req.body.email || "").trim().toLowerCase();
 
         if (!name || !email || !password) {
             return res.status(400).json({
@@ -12,7 +17,11 @@ const registerUser = async (req, res) => {
             });
         }
 
-        const existingUser = await User.findOne({ email });
+        if (password.length < 6) {
+            return res.status(400).json({ message: "Password must be at least 6 characters" });
+        }
+
+        const existingUser = await User.findOne({ email: exactCI(email) });
 
         if (existingUser) {
             return res.status(400).json({
@@ -52,7 +61,8 @@ const registerUser = async (req, res) => {
 
 const loginUser = async (req, res) => {
     try {
-        const { identifier, password } = req.body;
+        const { password } = req.body;
+        const identifier = (req.body.identifier || "").trim();
 
         if (!identifier || !password) {
             return res.status(400).json({
@@ -62,7 +72,7 @@ const loginUser = async (req, res) => {
 
         // Allow login via email OR username (name field)
         const user = await User.findOne({
-            $or: [{ email: identifier }, { name: identifier }],
+            $or: [{ email: exactCI(identifier) }, { name: identifier }],
         });
 
         if (!user) {
