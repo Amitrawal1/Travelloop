@@ -1,7 +1,7 @@
 // "Continue with Google" using Google Identity Services (popup, no redirect page needed).
 // The popup returns an access token, which the backend checks with Google before signing the user in.
 
-export const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+export const GOOGLE_CLIENT_ID = import.meta.env.GOOGLE_CLIENT_ID || import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
 const SCRIPT_SRC = 'https://accounts.google.com/gsi/client';
 let scriptPromise = null;

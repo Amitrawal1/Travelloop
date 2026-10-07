@@ -153,7 +153,7 @@ CLIENT_URL=http://localhost:5173         # frontend URL(s), comma-separated
 GOOGLE_CLIENT_ID=xxx.apps.googleusercontent.com   # optional: "Continue with Google"
 ```
 
-For the frontend, copy `Frontend/.env.example` to `Frontend/.env` (`VITE_API_URL=http://localhost:5001/api`, and `VITE_GOOGLE_CLIENT_ID` with the same Google client ID).
+For the frontend, copy `Frontend/.env.example` to `Frontend/.env` (`VITE_API_URL=http://localhost:5001/api`, and `GOOGLE_CLIENT_ID` with the same Google client ID).
 
 **Continue with Google:** in Google Cloud Console → APIs & Services → Credentials, create an *OAuth client ID* (type: Web application) and add every frontend URL (e.g. `http://localhost:5173` and your Vercel URL) under *Authorized JavaScript origins*. No redirect URI is needed.
 
@@ -168,7 +168,7 @@ The app deploys as **two Vercel projects from this one repo**:
 | Project | Root directory | Environment variables |
 |---------|----------------|-----------------------|
 | API | `Backend` | `MONGO_URI`, `JWT_SECRET`, `GROQ_API_KEY` (optional), `GOOGLE_CLIENT_ID` (optional), `CLIENT_URL` = the frontend's URL |
-| Web | `Frontend` (framework: Vite) | `VITE_API_URL` = the API's URL + `/api`, `VITE_GOOGLE_CLIENT_ID` (optional) |
+| Web | `Frontend` (framework: Vite) | `VITE_API_URL` = the API's URL + `/api`, `GOOGLE_CLIENT_ID` (optional) |
 
 1. Create a free MongoDB Atlas cluster and allow access from anywhere (`0.0.0.0/0`), since Vercel functions don't have fixed IPs.
 2. Import the repo in Vercel as the **API** project with root directory `Backend`, add its variables, and deploy. Check `https://<api>.vercel.app/api/health` returns `{"ok":true}`.
